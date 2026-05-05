@@ -5,17 +5,17 @@
 #   - default profile (TODO): caddy / web / ws / piston / cleanup
 #
 # Run from repo root via package.json scripts (pnpm db:migrate etc).
+# Scripts pass --env-file .env so ${...} interpolation below resolves
+# from the project-root .env, not docker/.env (compose default).
 
 services:
   flyway:
     image: flyway/flyway:10-alpine
     profiles: ["tools"]
-    env_file:
-      - ../.env
     environment:
-      - FLYWAY_URL=${FLYWAY_URL}
-      - FLYWAY_USER=${FLYWAY_USER}
-      - FLYWAY_PASSWORD=${FLYWAY_PASSWORD}
+      FLYWAY_URL: "jdbc:oracle:thin:@${ORACLE_TNS_NAME}?TNS_ADMIN=${ORACLE_WALLET_DIR}"
+      FLYWAY_USER: "${ORACLE_USER}"
+      FLYWAY_PASSWORD: "${ORACLE_PASSWORD}"
     volumes:
       - ../db/migrations:/flyway/sql:ro
       - ../db/flyway.conf:/flyway/conf/flyway.conf:ro

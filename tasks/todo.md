@@ -19,18 +19,18 @@ Real-time collaborative notepad with code execution, deployed on OCI Free Tier.
 
 ---
 
-## Phase 0 — Project Setup
+## Phase 0 — Project Setup ✅
 
-- [ ] `pnpm` workspace skeleton (`apps/web`, `apps/ws`, `apps/cleanup`)
-- [ ] Shared `packages/db` module (Oracle connection via `oracledb`, query helpers)
-- [ ] **Flyway** migration setup
-  - [ ] `db/migrations/` folder following `V<version>__<name>.sql` convention
-  - [ ] Flyway config (`flyway.conf`) with Oracle JDBC URL + wallet
-  - [ ] Containerised Flyway runner (`flyway/flyway:latest-alpine`) wired into Compose for one-shot `migrate` job
-  - [ ] `pnpm db:migrate` script wrapping the container
-- [ ] `.env.example` covering: Oracle wallet path, JDBC URL, JWT secret, site password hash, admin bootstrap
-- [ ] `.gitignore` (node_modules, .env, wallets, leveldb data, Flyway local cache)
-- [ ] README scaffolding (English only)
+- [x] `pnpm` workspace skeleton (`apps/web` Next.js 16, `apps/ws`, `apps/cleanup`)
+- [x] Shared `packages/db` module (skeleton; oracledb dep added — helpers land in Phase 2)
+- [x] **Flyway** migration setup
+  - [x] `db/migrations/V1__initial_schema.sql` with site_passwords / admins / rooms / room_snapshots / room_deletions
+  - [x] `db/flyway.conf` (env-driven URL/user/password)
+  - [x] Containerised Flyway runner via `docker/docker-compose.yml` (tools profile)
+  - [x] `pnpm db:migrate` / `db:info` / `db:validate` scripts at root
+- [x] `.env.example` covering Oracle wallet/TNS, JWT, BCRYPT_ROUNDS, WS, Piston, snapshot/TTL knobs
+- [x] `.gitignore` (node_modules, .env, wallets, leveldb data, caddy data)
+- [x] README with admin bootstrap SQL recipe
 
 ## Phase 1 — Real-time Editor (frontend)
 
