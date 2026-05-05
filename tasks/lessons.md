@@ -69,3 +69,32 @@ start of related work to avoid repeating the same mistakes.
   ```sh
   sed -i.bak 's|?/network/admin|/wallet|' wallet/sqlnet.ora
   ```
+
+---
+
+## Next.js (App Router)
+
+### `'use client'` is not enough when an imported module touches `window` at top level
+- **Symptom**: `ReferenceError: window is not defined at module evaluation` for
+  a component marked `'use client'`. Stack points at an `import` line of a
+  browser-only library (e.g. `y-monaco`, `monaco-editor`).
+- **Cause**: Next.js still server-renders the initial HTML for Client
+  Components, which means it imports their modules on the server. If any
+  transitively imported module reads `window` at evaluation time, it crashes
+  before any component code runs.
+- **Fix**: Split the heavy component into an inner file and wrap it with
+  `next/dynamic({ ssr: false })` from a tiny Client Component:
+  ```tsx
+  // Wrapper.tsx (Client Component)
+  "use client";
+  import dynamic from "next/dynamic";
+  const Inner = dynamic(() => import("./Inner").then((m) => m.Inner), {
+    ssr: false,
+  });
+  export function Wrapper(props) { return <Inner {...props} />; }
+  ```
+  Then the Server Component page imports `Wrapper`, and the browser-only
+  module only loads in the browser.
+- **Constraint**: `dynamic({ ssr: false })` must live inside a Client
+  Component. Server Components can render the wrapper, but cannot call
+  `dynamic` with `ssr: false` directly.
