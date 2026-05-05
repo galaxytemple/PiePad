@@ -1,0 +1,35 @@
+node_modules
+.pnpm-store
+.next
+dist
+build
+.turbo
+*.tsbuildinfo
+
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Oracle wallet
+wallet/
+*.sso
+*.pem
+*.p12
+
+# LevelDB / runtime data
+data/
+caddy_data/
+caddy_config/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

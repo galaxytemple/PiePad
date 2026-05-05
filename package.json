@@ -1,0 +1,16 @@
+{
+  "name": "piepad",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "dev:web": "pnpm --filter @piepad/web dev",
+    "dev:ws": "pnpm --filter @piepad/ws dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "db:migrate": "docker compose -f docker/docker-compose.yml --profile tools run --rm flyway migrate",
+    "db:info": "docker compose -f docker/docker-compose.yml --profile tools run --rm flyway info",
+    "db:validate": "docker compose -f docker/docker-compose.yml --profile tools run --rm flyway validate"
+  }
+}

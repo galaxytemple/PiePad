@@ -1,0 +1,23 @@
+# PiePad — Docker Compose
+#
+# Phases:
+#   - tools profile: one-shot Flyway migrate/info/validate
+#   - default profile (TODO): caddy / web / ws / piston / cleanup
+#
+# Run from repo root via package.json scripts (pnpm db:migrate etc).
+
+services:
+  flyway:
+    image: flyway/flyway:10-alpine
+    profiles: ["tools"]
+    env_file:
+      - ../.env
+    environment:
+      - FLYWAY_URL=${FLYWAY_URL}
+      - FLYWAY_USER=${FLYWAY_USER}
+      - FLYWAY_PASSWORD=${FLYWAY_PASSWORD}
+    volumes:
+      - ../db/migrations:/flyway/sql:ro
+      - ../db/flyway.conf:/flyway/conf/flyway.conf:ro
+      - ../wallet:/wallet:ro
+    command: ["-configFiles=/flyway/conf/flyway.conf", "info"]
