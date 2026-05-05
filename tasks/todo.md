@@ -32,13 +32,14 @@ Real-time collaborative notepad with code execution, deployed on OCI Free Tier.
 - [x] `.gitignore` (node_modules, .env, wallets, leveldb data, caddy data)
 - [x] README with admin bootstrap SQL recipe
 
-## Phase 1 — Real-time Editor (frontend)
+## Phase 1 — Real-time Editor (frontend) ✅
 
-- [ ] Next.js 16 app initialised in `apps/web`
-- [ ] Monaco Editor wrapper component (language picker)
-- [ ] `yjs` + `y-monaco` + `y-websocket` client wiring
-- [ ] Awareness layer: cursor colour + display name + active-user list
-- [ ] Room URL pattern: `/pad/[roomId]`
+- [x] Next.js 16 app initialised in `apps/web`
+- [x] Monaco Editor mounted via `@monaco-editor/react` (language picker deferred to Phase 3)
+- [x] `yjs` + `y-monaco` + `y-websocket` client wiring with proper teardown
+- [x] Awareness layer: random anon name + colour, active-user pill list, connection status badge
+- [x] Room URL pattern: `/pad/[roomId]` (Next.js 16 async `params`)
+- [x] Minimal y-websocket server in `apps/ws` (in-memory only — LevelDB/Oracle land in Phase 2)
 
 ## Phase 2 — Persistence Layer
 
