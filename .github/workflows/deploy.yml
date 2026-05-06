@@ -12,7 +12,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Configure SSH
@@ -25,7 +25,52 @@ jobs:
           chmod 600 ~/.ssh/deploy
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
-      - name: Pull latest, build, restart
+      # Build .env from GitHub Secrets so the VM never has secrets sitting in
+      # the repo working tree. Wallet stays on the VM (one-time scp during
+      # bootstrap) — too big and binary to round-trip cleanly through Secrets.
+      - name: Build .env
+        run: |
+          cat > .env.deploy <<EOF
+          PUBLIC_IP=${{ secrets.PUBLIC_IP }}
+          PUBLIC_HOST=${{ secrets.PUBLIC_HOST }}
+
+          ORACLE_USER=${{ secrets.ORACLE_USER }}
+          ORACLE_PASSWORD=${{ secrets.ORACLE_PASSWORD }}
+          ORACLE_TNS_NAME=${{ secrets.ORACLE_TNS_NAME }}
+          ORACLE_WALLET_DIR=/wallet
+          ORACLE_WALLET_PASSWORD=${{ secrets.ORACLE_WALLET_PASSWORD }}
+
+          AUTH_SECRET=${{ secrets.AUTH_SECRET }}
+          AUTH_GOOGLE_ID=${{ secrets.AUTH_GOOGLE_ID }}
+          AUTH_GOOGLE_SECRET=${{ secrets.AUTH_GOOGLE_SECRET }}
+          ADMIN_EMAILS=${{ secrets.ADMIN_EMAILS }}
+
+          NEXT_PUBLIC_WS_URL=wss://${{ secrets.PUBLIC_HOST }}/yjs
+          WS_INTERNAL_URL=http://ws:1234
+          PISTON_URL=${{ secrets.PISTON_URL }}
+
+          BCRYPT_ROUNDS=12
+          RUN_RATE_LIMIT_PER_MINUTE=10
+          RUN_TIMEOUT_MS=10000
+          COMPILE_TIMEOUT_MS=10000
+
+          SNAPSHOT_INTERVAL_MS=30000
+          ROOM_TTL_DAYS=30
+          CLEANUP_CRON=0 3 * * *
+          CLEANUP_RUN_ON_START=true
+          EOF
+
+      - name: Upload .env to VM
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          scp -i ~/.ssh/deploy -o StrictHostKeyChecking=accept-new \
+            .env.deploy "$DEPLOY_USER@$DEPLOY_HOST:/opt/piepad/.env"
+          ssh -i ~/.ssh/deploy "$DEPLOY_USER@$DEPLOY_HOST" \
+            "chmod 600 /opt/piepad/.env"
+
+      - name: Pull latest, migrate, build, restart
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -35,24 +80,22 @@ jobs:
             git fetch --depth 1 origin main
             git reset --hard origin/main
 
-            docker compose --env-file .env -f docker/docker-compose.yml \
-              up -d --build --remove-orphans
+            ./scripts/dc --profile tools run --rm flyway migrate
 
-            docker compose --env-file .env -f docker/docker-compose.yml \
-              --profile tools run --rm flyway migrate
+            ./scripts/dc up -d --build --remove-orphans
 
             docker image prune -f
           "
 
       - name: Health check
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
         run: |
           for i in 1 2 3 4 5; do
-            if curl -fsS --max-time 10 "https://${{ secrets.PUBLIC_HOST }}/" >/dev/null; then
-              echo "✓ /health passed"
+            if curl -fsS --max-time 10 "https://${PUBLIC_HOST}/" >/dev/null; then
+              echo "✓ healthy"
               exit 0
             fi
-            sleep 5
+            sleep 8
           done
-          echo "::warning::homepage did not respond within 25s"
+          echo "::warning::homepage did not respond within 40s — check ./scripts/dc logs caddy/web"
