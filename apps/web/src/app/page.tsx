@@ -7,6 +7,7 @@ import {
   listRoomsCreatedByUser,
   listRoomsVisitedByUser,
 } from "@piepad/db";
+import { Avatar, Button, Card } from "@heroui/react";
 import { redirect } from "next/navigation";
 
 interface RoomItem {
@@ -45,44 +46,40 @@ export default async function HomePage() {
   }));
 
   const user = session.user;
+  const displayName = profile?.nickname ?? profile?.name ?? user.email ?? "";
 
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950">
-      <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-6 py-4 dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="flex min-h-screen flex-col bg-background">
+      <header className="flex items-center justify-between border-b border-divider bg-content1 px-6 py-3">
         <a href="/" className="flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.svg" alt="" className="h-8 w-8" />
           <span className="text-xl font-bold tracking-tight">PiePad</span>
         </a>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <ThemeToggle />
           <CreatePadButton />
           {user.isAdmin ? (
             <a
               href="/admin/users"
-              className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+              className="text-sm text-default-500 hover:text-default-900"
             >
               Admin
             </a>
           ) : null}
           <a
             href="/me"
-            className="flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+            className="flex items-center gap-2 rounded-full border border-divider bg-content1 px-3 py-1 text-sm transition-colors hover:bg-content2"
           >
-            {user.image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={user.image}
-                alt=""
-                className="h-6 w-6 rounded-full"
-                referrerPolicy="no-referrer"
-              />
-            ) : null}
-            <span>
-              {profile?.nickname ?? profile?.name ?? user.email}
-            </span>
+            <Avatar size="sm">
+              {user.image ? <Avatar.Image src={user.image} /> : null}
+              <Avatar.Fallback>
+                {displayName[0]?.toUpperCase() ?? "?"}
+              </Avatar.Fallback>
+            </Avatar>
+            <span>{displayName}</span>
             {user.isAdmin ? (
-              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">
+              <span className="rounded bg-warning-100 px-1.5 py-0.5 text-xs font-medium text-warning-700">
                 admin
               </span>
             ) : null}
@@ -93,12 +90,9 @@ export default async function HomePage() {
               await signOut({ redirectTo: "/login" });
             }}
           >
-            <button
-              type="submit"
-              className="rounded border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-            >
+            <Button type="submit" variant="outline" size="sm">
               Sign out
-            </button>
+            </Button>
           </form>
         </div>
       </header>
@@ -131,41 +125,41 @@ function RoomColumn({
   emptyMessage: string;
 }) {
   return (
-    <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-      <h2 className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-        <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-          {title}
-        </span>
-        <span className="text-xs text-zinc-400">{rooms.length}</span>
-      </h2>
-      {rooms.length === 0 ? (
-        <p className="p-6 text-sm text-zinc-500">{emptyMessage}</p>
-      ) : (
-        <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-          {rooms.map((r) => (
-            <li key={r.id}>
-              <a
-                href={`/pad/${r.id}`}
-                className="flex items-center justify-between px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  {r.hasPassword ? (
-                    <span title="Password protected" aria-label="locked">
-                      🔒
+    <Card>
+      <Card.Header className="flex items-center justify-between">
+        <Card.Title className="text-sm font-semibold">{title}</Card.Title>
+        <span className="text-xs text-default-400">{rooms.length}</span>
+      </Card.Header>
+      <Card.Content className="p-0">
+        {rooms.length === 0 ? (
+          <p className="p-6 text-sm text-default-500">{emptyMessage}</p>
+        ) : (
+          <ul className="divide-y divide-divider">
+            {rooms.map((r) => (
+              <li key={r.id}>
+                <a
+                  href={`/pad/${r.id}`}
+                  className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-content2"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    {r.hasPassword ? (
+                      <span title="Password protected" aria-label="locked">
+                        🔒
+                      </span>
+                    ) : null}
+                    <span className="truncate text-sm font-medium">
+                      {r.name}
                     </span>
-                  ) : null}
-                  <span className="truncate text-sm font-medium">
-                    {r.name}
                   </span>
-                </span>
-                <span className="ml-3 shrink-0 text-xs text-zinc-500">
-                  {r.relativeLabel} {r.relativeTime}
-                </span>
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+                  <span className="ml-3 shrink-0 text-xs text-default-500">
+                    {r.relativeLabel} {r.relativeTime}
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card.Content>
+    </Card>
   );
 }
