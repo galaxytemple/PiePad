@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
@@ -35,6 +36,7 @@ export default async function AdminLayout({
           >
             Rooms
           </a>
+          <ThemeToggle />
           <a
             href="/"
             className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"

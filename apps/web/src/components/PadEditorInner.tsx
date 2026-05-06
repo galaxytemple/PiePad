@@ -2,6 +2,7 @@
 
 import { Editor } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
+import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MonacoBinding } from "y-monaco";
 import { WebsocketProvider } from "y-websocket";
@@ -9,6 +10,7 @@ import * as Y from "yjs";
 import { DEFAULT_LANGUAGE_ID, findLanguage, LANGUAGES } from "@/lib/languages";
 import { RoomSettings } from "@/components/RoomSettings";
 import { Stopwatch } from "@/components/Stopwatch";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:1234";
 
@@ -101,6 +103,9 @@ export function PadEditorInner({
   const [running, setRunning] = useState<boolean>(false);
   const [output, setOutput] = useState<RunResult | RunError | null>(null);
   const [deleted, setDeleted] = useState<DeletedNotice | null>(null);
+
+  const { resolvedTheme } = useTheme();
+  const monacoTheme = resolvedTheme === "light" ? "vs" : "vs-dark";
 
   const localUser = useMemo<AwarenessUser>(
     () => ({
@@ -360,6 +365,7 @@ export function PadEditorInner({
             ))}
           </select>
           <Stopwatch />
+          <ThemeToggle />
         </div>
         <div className="flex items-center gap-3">
           {users.map((u, i) => (
@@ -399,7 +405,7 @@ export function PadEditorInner({
         <Editor
           height="100%"
           language={languageId}
-          theme="vs-dark"
+          theme={monacoTheme}
           onMount={handleEditorMount}
           options={{
             fontSize: 14,

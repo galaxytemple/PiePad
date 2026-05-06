@@ -1,5 +1,6 @@
 import { auth, signOut } from "@/auth";
 import { CreatePadButton } from "@/components/CreatePadButton";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { timeAgo } from "@/lib/relative-time";
 import {
   getUserById,
@@ -54,6 +55,7 @@ export default async function HomePage() {
           <span className="text-xl font-bold tracking-tight">PiePad</span>
         </a>
         <div className="flex items-center gap-4">
+          <ThemeToggle />
           <CreatePadButton />
           {user.isAdmin ? (
             <a

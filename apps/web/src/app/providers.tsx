@@ -8,7 +8,12 @@ import type { ReactNode } from "react";
 // @heroui/styles in globals.css.
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="light"
+      enableSystem={false}
+      themes={["light", "dark"]}
+    >
       {children}
     </ThemeProvider>
   );

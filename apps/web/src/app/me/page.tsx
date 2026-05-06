@@ -1,4 +1,5 @@
 import { auth, signOut } from "@/auth";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { getUserById, updateUserNickname } from "@piepad/db";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -37,12 +38,15 @@ export default async function MePage() {
           <img src="/logo.svg" alt="" className="h-8 w-8" />
           <span className="text-xl font-bold tracking-tight">PiePad</span>
         </a>
-        <a
-          href="/"
-          className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-        >
-          ← Home
-        </a>
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <a
+            href="/"
+            className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+          >
+            ← Home
+          </a>
+        </div>
       </header>
 
       <main className="mx-auto w-full max-w-xl flex-1 p-6">
