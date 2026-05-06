@@ -1,0 +1,58 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false # never abort a half-finished deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Pull latest, build, restart
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail
+            cd /opt/piepad
+            git fetch --depth 1 origin main
+            git reset --hard origin/main
+
+            docker compose --env-file .env -f docker/docker-compose.yml \
+              up -d --build --remove-orphans
+
+            docker compose --env-file .env -f docker/docker-compose.yml \
+              --profile tools run --rm flyway migrate
+
+            docker image prune -f
+          "
+
+      - name: Health check
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl -fsS --max-time 10 "https://${{ secrets.PUBLIC_HOST }}/" >/dev/null; then
+              echo "✓ /health passed"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::warning::homepage did not respond within 25s"

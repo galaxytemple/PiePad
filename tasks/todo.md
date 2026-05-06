@@ -164,18 +164,27 @@ Real-time collaborative notepad with code execution, deployed on OCI Free Tier.
       dormant rooms that never had an active connection during cleanup).
 - [x] `pnpm cleanup:once` for ad-hoc runs / dry runs of the cron path.
 
-## Phase 6 — Infra & CI/CD
+## Phase 6 — Infra & CI/CD ✅
 
-- [ ] `docker-compose.yml` (caddy / nextjs-app / y-websocket / piston / cleanup)
-- [ ] Caddyfile — host bound to `<ip-with-dashes>.sslip.io`, automatic Let's Encrypt via http-01
-- [ ] OCI Security List: open 80, 443; document procedure
-- [ ] Caddy data volume mounted for cert persistence (survive container rebuilds + DNS hiccups)
-- [ ] GitHub Actions workflow:
-  - [ ] Build images
-  - [ ] SSH into OCI host
-  - [ ] `git pull` + `docker compose up -d --build`
-  - [ ] Health-check curl after restart
-- [ ] Secrets stored in GitHub Actions (SSH key, Oracle wallet base64)
+- [x] `docker/docker-compose.yml` default profile now boots prod stack:
+      caddy + web + ws + cleanup. Piston in `runtime` profile (opt-in).
+      Flyway in `tools` profile (one-shot).
+- [x] `docker/Caddyfile` reverse-proxies `${PUBLIC_HOST}` (sslip.io) →
+      web:3000 for the app, /yjs/* (prefix-stripped) → ws:1234 for the
+      WebSocket. Auto-HTTPS via Let's Encrypt http-01.
+- [x] `docker/{web,ws,cleanup}.Dockerfile` multi-stage builds. ws image
+      includes python3/make/g++ for leveldown's node-gyp pass; web uses
+      Next.js standalone output.
+- [x] `.dockerignore` strips node_modules / .next / wallet / data / tests
+      / docs from build contexts.
+- [x] `.github/workflows/deploy.yml` triggers on push to main: SSH in,
+      git reset --hard origin/main, docker compose up --build, run
+      Flyway migrations, post-deploy curl smoke check. Concurrency
+      group prevents overlapping deploys.
+- [x] `docs/deploy.md` operator guide: host bootstrap, .env template,
+      Google OAuth redirect URI, first-time migration, GH Actions
+      secrets list, day-2 ops, Piston self-host ↔ public switch,
+      troubleshooting matrix.
 
 ## Phase 7 — Hardening (post-MVP)
 
