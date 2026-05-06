@@ -24,3 +24,29 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/*
+ * y-monaco emits the decoration classes below but ships no CSS for them,
+ * so without these rules remote cursors appear as zero-pixel elements.
+ * The per-clientID variants are filled in dynamically by PadEditorInner
+ * using each viewer's awareness color; everything here is fallback shape.
+ */
+.yRemoteSelection {
+  background-color: rgba(250, 129, 0, 0.3);
+}
+
+.yRemoteSelectionHead {
+  position: absolute;
+  border-left: 2px solid orange;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.yRemoteSelectionHead::after {
+  position: absolute;
+  content: "";
+  border: 3px solid orange;
+  border-radius: 4px;
+  left: -4px;
+  top: -5px;
+}

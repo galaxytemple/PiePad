@@ -173,6 +173,41 @@ export function PadEditorInner({
     };
   }, [roomId, localUser]);
 
+  // y-monaco wires up decoration classes (.yRemoteSelection-<clientID>,
+  // .yRemoteSelectionHead-<clientID>) but ships no CSS. Inject per-client
+  // colour rules off the awareness state so each remote caret + selection
+  // takes that user's pill colour. globals.css covers the base shape.
+  useEffect(() => {
+    const provider = providerRef.current;
+    if (!provider) return;
+    const styleEl = document.createElement("style");
+    styleEl.dataset.pad = roomId;
+    document.head.appendChild(styleEl);
+
+    const update = () => {
+      const localId = provider.awareness.clientID;
+      const blocks: string[] = [];
+      for (const [clientId, state] of provider.awareness.getStates()) {
+        if (clientId === localId) continue;
+        const u = (state as { user?: { color?: string } }).user;
+        const color = typeof u?.color === "string" ? u.color : "#888";
+        blocks.push(
+          `.yRemoteSelection-${clientId} { background-color: ${color}55; }
+           .yRemoteSelectionHead-${clientId} { border-left-color: ${color}; }
+           .yRemoteSelectionHead-${clientId}::after { border-color: ${color}; }`
+        );
+      }
+      styleEl.textContent = blocks.join("\n");
+    };
+
+    provider.awareness.on("change", update);
+    update();
+    return () => {
+      provider.awareness.off("change", update);
+      styleEl.remove();
+    };
+  }, [roomId]);
+
   // Belt-and-suspenders: also poll room status. The Yjs meta.deleted
   // broadcast is the fast path, but a network blip during the broadcast
   // (or a ws restart) could swallow it. Both paths converge on setDeleted.
