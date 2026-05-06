@@ -72,7 +72,144 @@ export async function closePool(): Promise<void> {
   pool = undefined;
 }
 
-// ---- Domain helpers ---------------------------------------------------------
+// ---- User / OAuth -----------------------------------------------------------
+
+export interface UpsertOAuthUserInput {
+  email: string;
+  name: string | null;
+  avatarUrl: string | null;
+  provider: string;
+  providerSubject: string;
+}
+
+export interface UpsertOAuthUserResult {
+  id: number;
+  nickname: string | null;
+  avatarUrl: string | null;
+  name: string | null;
+}
+
+export async function upsertOAuthUser(
+  input: UpsertOAuthUserInput
+): Promise<UpsertOAuthUserResult> {
+  return withConnection(async (conn) => {
+    type FindRow = {
+      ID: number;
+      NICKNAME: string | null;
+      AVATAR_URL: string | null;
+      NAME: string | null;
+    };
+    const found = await conn.execute<FindRow>(
+      `SELECT id, nickname, avatar_url, name FROM users WHERE email = :email`,
+      { email: input.email },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    let userId: number;
+    let nickname: string | null;
+    if (found.rows && found.rows.length > 0) {
+      const row = found.rows[0]!;
+      userId = row.ID;
+      nickname = row.NICKNAME;
+      await conn.execute(
+        `UPDATE users
+            SET name = :name,
+                avatar_url = :avatarUrl,
+                last_login_at = CURRENT_TIMESTAMP,
+                primary_provider = COALESCE(primary_provider, :provider)
+          WHERE id = :id`,
+        {
+          name: input.name,
+          avatarUrl: input.avatarUrl,
+          provider: input.provider,
+          id: userId,
+        }
+      );
+    } else {
+      const inserted = await conn.execute(
+        `INSERT INTO users (email, name, avatar_url, primary_provider, last_login_at)
+         VALUES (:email, :name, :avatarUrl, :provider, CURRENT_TIMESTAMP)
+         RETURNING id INTO :outId`,
+        {
+          email: input.email,
+          name: input.name,
+          avatarUrl: input.avatarUrl,
+          provider: input.provider,
+          outId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT },
+        }
+      );
+      const outBinds = inserted.outBinds as { outId: number[] } | undefined;
+      const newId = outBinds?.outId?.[0];
+      if (typeof newId !== "number") {
+        throw new Error("INSERT INTO users did not return id");
+      }
+      userId = newId;
+      nickname = null;
+    }
+
+    await conn.execute(
+      `MERGE INTO user_oauth_accounts a
+         USING (SELECT :provider AS p, :subject AS s FROM dual) src
+         ON (a.provider = src.p AND a.provider_subject = src.s)
+       WHEN MATCHED THEN
+         UPDATE SET provider_email = :email, user_id = :userId
+       WHEN NOT MATCHED THEN
+         INSERT (user_id, provider, provider_subject, provider_email)
+         VALUES (:userId, :provider, :subject, :email)`,
+      {
+        userId,
+        provider: input.provider,
+        subject: input.providerSubject,
+        email: input.email,
+      }
+    );
+
+    await conn.commit();
+    return {
+      id: userId,
+      nickname,
+      avatarUrl: input.avatarUrl,
+      name: input.name,
+    };
+  });
+}
+
+export interface UserProfile {
+  id: number;
+  email: string;
+  name: string | null;
+  nickname: string | null;
+  avatarUrl: string | null;
+}
+
+export async function getUserById(id: number): Promise<UserProfile | null> {
+  return withConnection(async (conn) => {
+    type Row = {
+      ID: number;
+      EMAIL: string;
+      NAME: string | null;
+      NICKNAME: string | null;
+      AVATAR_URL: string | null;
+    };
+    const result = await conn.execute<Row>(
+      `SELECT id, email, name, nickname, avatar_url
+         FROM users WHERE id = :id`,
+      { id },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const row = result.rows?.[0];
+    if (!row) return null;
+    return {
+      id: row.ID,
+      email: row.EMAIL,
+      name: row.NAME,
+      nickname: row.NICKNAME,
+      avatarUrl: row.AVATAR_URL,
+    };
+  });
+}
+
+// ---- Rooms ------------------------------------------------------------------
 
 export async function ensureRoom(
   roomId: string,
