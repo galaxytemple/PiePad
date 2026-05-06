@@ -81,16 +81,70 @@ Real-time collaborative notepad with code execution, deployed on OCI Free Tier.
       so `apps/web` and `apps/ws` read from the same source of truth
 - [x] `NEXT_PUBLIC_WS_URL` plumbed through `.env.example`
 
-## Phase 4 — Auth & Rooms
+## Phase 4 — Auth & Rooms (Google OAuth-only)
 
-- [ ] `bcrypt` password hashing helper
-- [ ] Site gate: middleware redirect to `/login` if no `site_session` cookie
-- [ ] Admin login `/admin/login` → JWT in HTTP-only cookie
-- [ ] **Admin bootstrap**: no app-level seeding — operator inserts row into `admins` table directly via SQL (document the bcrypt hash command in README)
-- [ ] Room creation API with optional password
-- [ ] Room access flow: URL → password prompt if hashed password set → grant `room_session` cookie
-- [ ] Admin-only `/admin/rooms` list page (paginated, last-accessed sort)
-- [ ] Admin actions: rename, delete, force-snapshot, reset password
+### 4.1 Schema (V3 migration)
+- [ ] DROP `site_passwords` (site-password gate replaced by mandatory sign-in)
+- [ ] DROP `admins` (replaced by `users` + `ADMIN_EMAILS` env allowlist)
+- [ ] CREATE `users` (id, email UNIQUE, name, nickname, avatar_url,
+      primary_provider, created_at, last_login_at)
+- [ ] CREATE `user_oauth_accounts` (provider, provider_subject UNIQUE,
+      provider_email, user_id FK) — multi-provider extension point
+- [ ] CREATE `room_visits` (user_id, room_id PK pair, first_visited_at,
+      last_visited_at, visit_count)
+- [ ] ALTER `rooms`: drop `created_by_admin_id`, add `created_by_user_id` FK
+
+### 4.2 Auth core (Auth.js v5 + Google)
+- [ ] Install `next-auth@^5`, `@auth/core`, set `AUTH_SECRET`,
+      `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`
+- [ ] `/api/auth/[...nextauth]` route handler
+- [ ] `signIn` callback upserts into `users` + `user_oauth_accounts`,
+      stamps `last_login_at`
+- [ ] JWT strategy; session carries `userId`, `email`, `nickname`,
+      `avatarUrl`, `isAdmin`
+- [ ] `ADMIN_EMAILS` env (comma-separated) → effective admin = email
+      in list (no DB column needed for admin)
+- [ ] `middleware.ts` redirects unauthenticated → `/login`
+      (allowlist: `/login`, `/api/auth/*`, `/icon.svg`, `/apple-icon.png`)
+
+### 4.3 Pages
+- [ ] `/login` — Google sign-in button (extension slot for more providers)
+- [ ] `/` — home dashboard: my rooms, visited rooms, "Create new pad" CTA
+- [ ] `/pad/[roomId]` — same editor, awareness uses real nickname/avatar,
+      room-password modal gate when room is private
+- [ ] `/me` — profile (Google name + avatar read-only, nickname editable),
+      sign-out
+- [ ] `/admin/users` — admin-only user list (paginated, sortable)
+- [ ] `/admin/rooms` — admin-only room list with delete
+
+### 4.4 Room features
+- [ ] Create-room modal: name + optional password
+- [ ] Room owner toolbar in pad header: rename, delete, set/clear password
+- [ ] Room password: bcrypt at rest; pad page asks for password when
+      `password_hash IS NOT NULL` and grants short-lived cookie
+- [ ] On every pad open: `room_visits` upsert + `last_visited_at` bump
+
+### 4.5 Per-user rate limit
+- [ ] `/api/run` token bucket key switched from IP to `userId`
+      (still in-memory; Phase 7 swaps for Redis)
+
+### 4.6 UI / animation
+- [ ] Add `@heroui/react` + `framer-motion`; verify Tailwind v4 compat
+- [ ] Wrap app in `HeroUIProvider`
+- [ ] Replace plain Tailwind buttons/inputs/cards with HeroUI components
+      (Button, Card, Avatar, Modal, Input, Listbox, Skeleton, Tooltip)
+- [ ] framer-motion: page-transition fade, modal scale/fade,
+      list stagger on the home dashboard
+- [ ] Loading skeletons during fetches (rooms list, admin tables)
+
+### 4.7 Setup checklist (operator)
+- [ ] Create OAuth client in Google Cloud Console (Web application)
+- [ ] Authorised redirect URIs:
+      `http://localhost:3000/api/auth/callback/google`
+      (later: `https://<host>/api/auth/callback/google`)
+- [ ] Copy client ID/secret into `.env`
+- [ ] Set `ADMIN_EMAILS=sanghoon@giboo.com[,...]`
+- [ ] `pnpm db:migrate` to apply V3
 
 ## Phase 5 — Lifecycle Cleanup
 
