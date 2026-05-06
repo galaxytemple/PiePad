@@ -67,8 +67,9 @@ Real-time collaborative notepad with code execution, deployed on OCI Free Tier.
       for executed code, packages persisted in `piston_packages` volume
 - [x] Dev port `2000` published; prod will reach piston only on the internal
       network via `PISTON_URL=http://piston:2000`
-- [x] One-shot installer `scripts/install-piston-langs.sh` (pinned versions)
-      wired as `pnpm piston:install`; ergonomics: `pnpm piston:up/down/logs`
+- [x] One-shot installer `scripts/install-piston-langs.sh` (pinned versions
+      for python / node / typescript / java / c++) wired as
+      `pnpm piston:install`; ergonomics: `pnpm piston:up/down/logs`
 - [x] Next.js API route `POST /api/run` → Piston `/api/v2/execute`,
       Zod-validated, AbortController-bounded, rate-limited per-IP
       (in-memory token bucket, default 10/min — Phase 7 swaps for Redis)
