@@ -177,6 +177,20 @@ start of related work to avoid repeating the same mistakes.
 
 ## Piston
 
+### Docker Desktop on macOS breaks nsjail; OrbStack just works
+- **Symptom**: `Cannot run proxy, clone failed: Invalid argument` from
+  every Piston execute, even with `privileged: true`,
+  `seccomp=unconfined`, `apparmor=unconfined`, `cap_add: SYS_ADMIN`,
+  `userns_mode: host`, and tmpfs jobs dir all in place.
+- **Cause**: Docker Desktop's LinuxKit VM (especially under the Apple
+  Virtualization framework on Apple Silicon) doesn't expose all the kernel
+  namespace primitives nsjail clones, no matter how the container is
+  configured. The same compose works as-is on a native Linux host.
+- **Fix**: replace Docker Desktop with OrbStack on dev machines. It's a
+  drop-in for `docker` / `docker compose`, ships a more permissive Linux
+  VM, and runs nsjail correctly. Production (OCI A1 ARM Linux) doesn't
+  need any of this — just `apt install docker.io`.
+
 ### `/piston/jobs` must be tmpfs, not a regular volume
 - **Symptom**: every execute request returns 500 with body
   `Cannot run proxy, clone failed: Invalid argument` — Piston starts and
