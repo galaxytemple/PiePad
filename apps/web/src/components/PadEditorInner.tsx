@@ -286,15 +286,7 @@ function OutputPanel({ result }: { result: RunResult | RunError | null }) {
     );
   }
   if ("error" in result) {
-    return (
-      <div className="h-40 overflow-auto border-t border-zinc-200 bg-zinc-950 px-4 py-2 font-mono text-xs text-red-400 dark:border-zinc-800">
-        <div className="font-semibold">{result.error}</div>
-        {result.message ? <div>{result.message}</div> : null}
-        {result.retryAfterSec !== undefined ? (
-          <div>retry after {result.retryAfterSec}s</div>
-        ) : null}
-      </div>
-    );
+    return <ErrorPanel result={result} />;
   }
   return (
     <div className="h-40 overflow-auto border-t border-zinc-200 bg-zinc-950 px-4 py-2 font-mono text-xs dark:border-zinc-800">
@@ -314,6 +306,43 @@ function OutputPanel({ result }: { result: RunResult | RunError | null }) {
       {!result.stdout && !result.stderr && !result.compileStderr ? (
         <span className="text-zinc-500">(no output)</span>
       ) : null}
+    </div>
+  );
+}
+
+const FRIENDLY_ERROR_MESSAGES: Record<string, string> = {
+  piston_unreachable:
+    "Code execution server is starting up or unreachable. Try again in a few seconds.",
+  piston_error: "Code execution server returned an error.",
+  rate_limited: "You're running code too fast.",
+  timeout: "Request timed out before the server responded.",
+  invalid_request: "Invalid request payload.",
+  invalid_json: "Invalid request body.",
+  client_error: "Could not reach the API.",
+};
+
+function ErrorPanel({ result }: { result: RunError }) {
+  const friendly =
+    FRIENDLY_ERROR_MESSAGES[result.error] ?? "Something went wrong.";
+  const isWarmup = result.error === "piston_unreachable";
+  return (
+    <div className="h-40 overflow-auto border-t border-zinc-200 bg-zinc-950 px-4 py-2 font-mono text-xs dark:border-zinc-800">
+      <div
+        className={`font-semibold ${isWarmup ? "text-amber-300" : "text-red-400"}`}
+      >
+        {friendly}
+      </div>
+      {result.retryAfterSec !== undefined ? (
+        <div className="text-zinc-400">
+          Retry in {result.retryAfterSec}s.
+        </div>
+      ) : null}
+      {result.message ? (
+        <div className="mt-1 text-zinc-500">{result.message}</div>
+      ) : null}
+      <div className="mt-1 text-[10px] text-zinc-600">
+        ({result.error})
+      </div>
     </div>
   );
 }
