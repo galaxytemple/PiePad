@@ -37,7 +37,7 @@ export function RoomSettings({ roomId, roomName, hasPassword }: Props) {
                 Pad settings
               </Modal.Heading>
             </Modal.Header>
-            <Modal.Body className="flex flex-col gap-6">
+            <Modal.Body className="flex flex-col gap-6 overflow-visible p-2">
               <RenameSection roomId={roomId} initialName={roomName} />
               <PasswordSection roomId={roomId} hasPassword={hasPassword} />
               <DeleteSection roomId={roomId} />

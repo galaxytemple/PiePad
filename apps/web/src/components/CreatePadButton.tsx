@@ -54,7 +54,7 @@ export function CreatePadButton() {
                 void onSubmit(fd);
               }}
             >
-              <Modal.Body className="flex flex-col gap-4">
+              <Modal.Body className="flex flex-col gap-4 overflow-visible p-2">
                 <label className="flex flex-col gap-1">
                   <span className="text-sm font-medium">Name</span>
                   <Input
