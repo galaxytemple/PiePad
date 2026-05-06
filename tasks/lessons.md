@@ -267,6 +267,26 @@ start of related work to avoid repeating the same mistakes.
 
 ## Next.js (App Router)
 
+### Re-derive identity inside server actions, never trust closure-captured ids
+- **Why**: Next.js server actions encode closure variables into a signed
+  POST payload, so a captured `userId` is technically tamper-resistant. But
+  any future refactor that also reads form input, or any framework-level
+  CSRF lapse, can blow that assumption up. The defensive pattern is cheap.
+- **Pattern**: every `"use server"` mutation re-runs `auth()` and re-derives
+  `userId` from the session before doing the write:
+  ```ts
+  async function saveX(form: FormData) {
+    "use server";
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("unauthorized");
+    const userId = Number(session.user.id);
+    if (!Number.isInteger(userId)) throw new Error("invalid session");
+    await dbWrite(userId, ...);
+  }
+  ```
+- This also means DB-layer functions like `updateUserNickname(id, ...)` do
+  not need to do their own auth — the boundary is the server action.
+
 ### `'use client'` is not enough when an imported module touches `window` at top level
 - **Symptom**: `ReferenceError: window is not defined at module evaluation` for
   a component marked `'use client'`. Stack points at an `import` line of a

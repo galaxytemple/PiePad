@@ -1,6 +1,11 @@
 import { auth } from "@/auth";
 import { PadEditor } from "@/components/PadEditor";
-import { ensureRoom, getRoomById, upsertRoomVisit } from "@piepad/db";
+import {
+  ensureRoom,
+  getRoomById,
+  getUserById,
+  upsertRoomVisit,
+} from "@piepad/db";
 import { notFound, redirect } from "next/navigation";
 
 interface PageProps {
@@ -20,13 +25,18 @@ export default async function PadPage({ params }: PageProps) {
   await ensureRoom(roomId, roomId, userId);
   await upsertRoomVisit(userId, roomId);
 
-  const room = await getRoomById(roomId);
+  const [room, profile] = await Promise.all([
+    getRoomById(roomId),
+    getUserById(userId),
+  ]);
   if (!room) notFound();
 
   const isOwner = room.createdByUserId === userId;
+  // Re-fetch profile so a nickname edit appears in awareness without
+  // forcing the user to sign out and back in (JWT-cached fields are stale).
   const displayName =
-    session.user.nickname ?? session.user.name ?? session.user.email ?? "Anon";
-  const avatarUrl = session.user.image ?? null;
+    profile?.nickname ?? profile?.name ?? session.user.email ?? "Anon";
+  const avatarUrl = profile?.avatarUrl ?? session.user.image ?? null;
 
   return (
     <PadEditor

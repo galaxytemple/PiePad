@@ -182,6 +182,20 @@ export interface UserProfile {
   avatarUrl: string | null;
 }
 
+export async function updateUserNickname(
+  id: number,
+  nickname: string | null
+): Promise<void> {
+  const trimmed = nickname?.trim() ?? "";
+  await withConnection(async (conn) => {
+    await conn.execute(
+      `UPDATE users SET nickname = :nickname WHERE id = :id`,
+      { id, nickname: trimmed.length > 0 ? trimmed : null },
+      { autoCommit: true }
+    );
+  });
+}
+
 export async function getUserById(id: number): Promise<UserProfile | null> {
   return withConnection(async (conn) => {
     type Row = {

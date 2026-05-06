@@ -1,7 +1,11 @@
 import { auth, signOut } from "@/auth";
 import { CreatePadButton } from "@/components/CreatePadButton";
 import { timeAgo } from "@/lib/relative-time";
-import { listRoomsCreatedByUser, listRoomsVisitedByUser } from "@piepad/db";
+import {
+  getUserById,
+  listRoomsCreatedByUser,
+  listRoomsVisitedByUser,
+} from "@piepad/db";
 import { redirect } from "next/navigation";
 
 interface RoomItem {
@@ -17,9 +21,10 @@ export default async function HomePage() {
   if (!session?.user?.id) redirect("/login");
   const userId = Number(session.user.id);
 
-  const [createdRooms, visitedRooms] = await Promise.all([
+  const [createdRooms, visitedRooms, profile] = await Promise.all([
     listRoomsCreatedByUser(userId, 20),
     listRoomsVisitedByUser(userId, 20),
+    getUserById(userId),
   ]);
 
   const myPads: RoomItem[] = createdRooms.map((r) => ({
@@ -58,7 +63,10 @@ export default async function HomePage() {
               Admin
             </a>
           ) : null}
-          <div className="flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <a
+            href="/me"
+            className="flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+          >
             {user.image ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -68,13 +76,15 @@ export default async function HomePage() {
                 referrerPolicy="no-referrer"
               />
             ) : null}
-            <span>{user.nickname ?? user.name ?? user.email}</span>
+            <span>
+              {profile?.nickname ?? profile?.name ?? user.email}
+            </span>
             {user.isAdmin ? (
               <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">
                 admin
               </span>
             ) : null}
-          </div>
+          </a>
           <form
             action={async () => {
               "use server";
