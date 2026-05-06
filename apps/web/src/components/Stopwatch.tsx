@@ -6,11 +6,14 @@ import { useEffect, useState } from "react";
 // for an interview-style shared timer we'd want a Y.Map entry, but per-user
 // is the saner default.
 
+const RESET_CONFIRM_MS = 3000;
+
 export function Stopwatch() {
   const [running, setRunning] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [accumulated, setAccumulated] = useState(0);
   const [now, setNow] = useState(() => Date.now());
+  const [resetArmed, setResetArmed] = useState(false);
 
   useEffect(() => {
     if (!running) return;
@@ -18,10 +21,18 @@ export function Stopwatch() {
     return () => clearInterval(id);
   }, [running]);
 
+  // Auto-disarm reset confirmation after 3s of inaction.
+  useEffect(() => {
+    if (!resetArmed) return;
+    const id = setTimeout(() => setResetArmed(false), RESET_CONFIRM_MS);
+    return () => clearTimeout(id);
+  }, [resetArmed]);
+
   const elapsedMs =
     running && startedAt !== null ? accumulated + (now - startedAt) : accumulated;
 
   const toggle = () => {
+    setResetArmed(false);
     if (running) {
       setAccumulated(elapsedMs);
       setStartedAt(null);
@@ -33,11 +44,19 @@ export function Stopwatch() {
     }
   };
 
-  const reset = () => {
+  const handleResetClick = () => {
+    if (elapsedMs === 0 && !running) return;
+    if (!resetArmed) {
+      setResetArmed(true);
+      return;
+    }
     setRunning(false);
     setStartedAt(null);
     setAccumulated(0);
+    setResetArmed(false);
   };
+
+  const resetDisabled = elapsedMs === 0 && !running;
 
   return (
     <div className="flex items-center gap-1 rounded border border-zinc-300 bg-white px-2 py-1 dark:border-zinc-700 dark:bg-zinc-800">
@@ -54,12 +73,19 @@ export function Stopwatch() {
       </button>
       <button
         type="button"
-        onClick={reset}
-        aria-label="Reset"
-        disabled={elapsedMs === 0 && !running}
-        className="rounded px-1 text-xs hover:bg-zinc-100 disabled:opacity-30 dark:hover:bg-zinc-700"
+        onClick={handleResetClick}
+        aria-label={resetArmed ? "Confirm reset" : "Reset"}
+        disabled={resetDisabled}
+        className={`rounded px-1.5 text-xs transition-colors disabled:opacity-30 ${
+          resetArmed
+            ? "bg-red-500 text-white hover:bg-red-600"
+            : "hover:bg-zinc-100 dark:hover:bg-zinc-700"
+        }`}
+        title={
+          resetArmed ? "Click again to confirm reset" : "Click to reset"
+        }
       >
-        ↺
+        {resetArmed ? "Sure?" : "↺"}
       </button>
     </div>
   );
