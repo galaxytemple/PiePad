@@ -4,10 +4,13 @@ import { z } from "zod";
 
 export const runtime = "nodejs";
 
-// Use 127.0.0.1 instead of localhost: Node 17+ resolves localhost to ::1
-// (IPv6) first and Docker Desktop's port forwarding only binds IPv4, so the
-// connection refuses. In compose, override with PISTON_URL=http://piston:2000.
-const PISTON_URL = process.env.PISTON_URL ?? "http://127.0.0.1:2000";
+// PISTON_URL is the API root — code appends /execute. This lets us swap
+// between self-hosted and the public API without forking call sites:
+//   - self-hosted:  http://piston:2000/api/v2     (or 127.0.0.1 in dev)
+//   - public:       https://emkc.org/api/v2/piston
+// Default targets a local container, IPv4 to dodge Node's IPv6-first
+// localhost resolution against Docker's IPv4-only port mapping.
+const PISTON_URL = process.env.PISTON_URL ?? "http://127.0.0.1:2000/api/v2";
 const RATE_LIMIT_PER_MINUTE = Number(
   process.env.RUN_RATE_LIMIT_PER_MINUTE ?? 10
 );
@@ -98,7 +101,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const timer = setTimeout(() => controller.abort(), totalBudgetMs);
 
   try {
-    const pistonRes = await fetch(`${PISTON_URL}/api/v2/execute`, {
+    const pistonRes = await fetch(`${PISTON_URL}/execute`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       signal: controller.signal,

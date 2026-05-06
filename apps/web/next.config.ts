@@ -11,6 +11,9 @@ dotenv.config({ path: path.resolve(here, "../../.env"), override: false });
 
 const nextConfig: NextConfig = {
   transpilePackages: ["@piepad/db"],
+  // Self-contained server bundle for Docker — copies only the runtime deps
+  // each route actually uses, so the production image stays slim.
+  output: "standalone",
 };
 
 export default nextConfig;
