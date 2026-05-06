@@ -29,6 +29,16 @@ services:
     container_name: piepad-piston
     restart: unless-stopped
     privileged: true # nsjail isolation primitives require root capabilities
+    # Docker Desktop's default seccomp/AppArmor profiles block several
+    # syscalls nsjail relies on inside the namespace it clones. Without
+    # these unconfines, nsjail fails with 'clone failed: Invalid argument'.
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
+    cap_add:
+      - SYS_ADMIN
+      - SYS_PTRACE
+      - SYS_CHROOT
     ports:
       - "2000:2000" # dev convenience; in prod, web container talks to piston:2000 via the internal network only
     environment:
