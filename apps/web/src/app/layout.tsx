@@ -1,3 +1,4 @@
+import HolyLoader from "holy-loader";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "./providers";
@@ -30,6 +31,8 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
+        {/* GitHub-style top progress bar — pure CSS, no framer-motion */}
+        <HolyLoader color="#3b82f6" height="2.5px" speed={250} showSpinner={false} />
         <Providers>{children}</Providers>
       </body>
     </html>
