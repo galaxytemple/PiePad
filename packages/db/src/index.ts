@@ -248,6 +248,33 @@ export async function ensureRoom(
   });
 }
 
+export async function setRoomPasswordHash(
+  roomId: string,
+  hash: string | null
+): Promise<void> {
+  await withConnection(async (conn) => {
+    await conn.execute(
+      `UPDATE rooms SET password_hash = :hash WHERE id = :roomId`,
+      { roomId, hash },
+      { autoCommit: true }
+    );
+  });
+}
+
+export async function getRoomPasswordHash(
+  roomId: string
+): Promise<string | null> {
+  return withConnection(async (conn) => {
+    type Row = { PASSWORD_HASH: string | null };
+    const result = await conn.execute<Row>(
+      `SELECT password_hash FROM rooms WHERE id = :roomId`,
+      { roomId },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows?.[0]?.PASSWORD_HASH ?? null;
+  });
+}
+
 export async function upsertRoomVisit(
   userId: number,
   roomId: string
