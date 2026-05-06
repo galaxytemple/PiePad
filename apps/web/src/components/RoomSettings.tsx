@@ -5,7 +5,13 @@ import {
   renameRoomAction,
   setRoomPasswordAction,
 } from "@/app/actions/rooms";
-import { useEffect, useState } from "react";
+import {
+  Button,
+  Input,
+  Modal,
+  useOverlayState,
+} from "@heroui/react";
+import { useState } from "react";
 
 interface Props {
   roomId: string;
@@ -14,59 +20,32 @@ interface Props {
 }
 
 export function RoomSettings({ roomId, roomName, hasPassword }: Props) {
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+  const state = useOverlayState();
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="rounded border border-zinc-300 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-        aria-label="Room settings"
-      >
-        Settings
-      </button>
-
-      {open ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setOpen(false);
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="w-full max-w-md space-y-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900"
-          >
-            <header className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Pad settings</h2>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </header>
-
-            <RenameSection roomId={roomId} initialName={roomName} />
-            <PasswordSection roomId={roomId} hasPassword={hasPassword} />
-            <DeleteSection roomId={roomId} />
-          </div>
-        </div>
-      ) : null}
-    </>
+    <Modal state={state}>
+      <Modal.Trigger>
+        <Button size="sm" variant="outline" aria-label="Room settings">
+          Settings
+        </Button>
+      </Modal.Trigger>
+      <Modal.Backdrop>
+        <Modal.Container placement="center" size="sm">
+          <Modal.Dialog>
+            <Modal.Header>
+              <Modal.Heading className="text-lg font-semibold">
+                Pad settings
+              </Modal.Heading>
+            </Modal.Header>
+            <Modal.Body className="flex flex-col gap-6">
+              <RenameSection roomId={roomId} initialName={roomName} />
+              <PasswordSection roomId={roomId} hasPassword={hasPassword} />
+              <DeleteSection roomId={roomId} />
+            </Modal.Body>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }
 
@@ -79,25 +58,20 @@ function RenameSection({
 }) {
   return (
     <section className="space-y-2">
-      <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-        Rename
-      </h3>
+      <h3 className="text-sm font-medium">Rename</h3>
       <form action={renameRoomAction} className="flex items-center gap-2">
         <input type="hidden" name="roomId" value={roomId} />
-        <input
+        <Input
           name="name"
           type="text"
           defaultValue={initialName}
           maxLength={200}
           required
-          className="flex-1 rounded border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+          className="flex-1"
         />
-        <button
-          type="submit"
-          className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
-        >
+        <Button type="submit" variant="primary" size="sm">
           Save
-        </button>
+        </Button>
       </form>
     </section>
   );
@@ -112,29 +86,26 @@ function PasswordSection({
 }) {
   return (
     <section className="space-y-2">
-      <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-        Password
-      </h3>
-      <p className="text-xs text-zinc-500">
+      <h3 className="text-sm font-medium">Password</h3>
+      <p className="text-xs text-default-500">
         {hasPassword
           ? "This pad is currently locked. Submit a new password to change it, or leave blank and submit to remove it."
           : "Add a password to require it for non-owner visitors."}
       </p>
       <form action={setRoomPasswordAction} className="flex items-center gap-2">
         <input type="hidden" name="roomId" value={roomId} />
-        <input
+        <Input
           name="password"
           type="password"
           autoComplete="new-password"
-          placeholder={hasPassword ? "New password (blank = remove)" : "Password"}
-          className="flex-1 rounded border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+          placeholder={
+            hasPassword ? "New password (blank = remove)" : "Password"
+          }
+          className="flex-1"
         />
-        <button
-          type="submit"
-          className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
-        >
+        <Button type="submit" variant="primary" size="sm">
           Save
-        </button>
+        </Button>
       </form>
     </section>
   );
@@ -143,39 +114,35 @@ function PasswordSection({
 function DeleteSection({ roomId }: { roomId: string }) {
   const [confirming, setConfirming] = useState(false);
   return (
-    <section className="space-y-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
-      <h3 className="text-sm font-medium text-red-600 dark:text-red-400">
-        Delete pad
-      </h3>
-      <p className="text-xs text-zinc-500">
+    <section className="space-y-2 border-t border-divider pt-4">
+      <h3 className="text-sm font-medium text-danger-600">Delete pad</h3>
+      <p className="text-xs text-default-500">
         Permanent. Removes the document, snapshots, and visit history. Anyone
         currently editing will be evicted to read-only.
       </p>
       {confirming ? (
         <form action={deleteRoomAction} className="flex items-center gap-2">
           <input type="hidden" name="roomId" value={roomId} />
-          <button
+          <Button
             type="button"
-            onClick={() => setConfirming(false)}
-            className="rounded border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            variant="outline"
+            size="sm"
+            onPress={() => setConfirming(false)}
           >
             Cancel
-          </button>
-          <button
-            type="submit"
-            className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
-          >
+          </Button>
+          <Button type="submit" variant="danger" size="sm">
             Yes, delete
-          </button>
+          </Button>
         </form>
       ) : (
-        <button
-          type="button"
-          onClick={() => setConfirming(true)}
-          className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
+        <Button
+          variant="danger-soft"
+          size="sm"
+          onPress={() => setConfirming(true)}
         >
           Delete pad
-        </button>
+        </Button>
       )}
     </section>
   );

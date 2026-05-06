@@ -1,6 +1,7 @@
 "use client";
 
 import { Editor } from "@monaco-editor/react";
+import { Button } from "@heroui/react";
 import type { editor } from "monaco-editor";
 import Link from "next/link";
 import { useTheme } from "next-themes";
@@ -317,11 +318,11 @@ export function PadEditorInner({
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-6 py-3 dark:border-zinc-800 dark:bg-zinc-900">
+      <header className="flex items-center justify-between border-b border-divider bg-content1 px-6 py-3">
         <div className="flex items-center gap-3">
           <Link
             href="/"
-            className="text-sm text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+            className="text-sm text-default-400 hover:text-default-700"
             aria-label="Home"
           >
             ←
@@ -335,7 +336,7 @@ export function PadEditorInner({
             {roomName}
           </span>
           {isOwner ? (
-            <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+            <span className="rounded bg-primary-100 px-1.5 py-0.5 text-xs text-primary-700">
               owner
             </span>
           ) : null}
@@ -346,7 +347,7 @@ export function PadEditorInner({
               hasPassword={hasPassword}
             />
           ) : null}
-          <span className="font-mono text-xs text-zinc-400">{roomId}</span>
+          <span className="font-mono text-xs text-default-400">{roomId}</span>
           <span
             className={`rounded px-2 py-0.5 text-xs ${STATUS_STYLES[status]}`}
           >
@@ -355,7 +356,7 @@ export function PadEditorInner({
           <select
             value={languageId}
             onChange={(e) => updateLanguage(e.target.value)}
-            className="rounded border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+            className="rounded border border-divider bg-content1 px-2 py-1 text-sm"
             aria-label="Language"
           >
             {LANGUAGES.map((lang) => (
@@ -418,7 +419,7 @@ export function PadEditorInner({
         />
       </div>
 
-      <div className="flex items-start gap-2 border-t border-zinc-200 bg-zinc-50 px-4 py-2 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="flex items-start gap-2 border-t border-divider bg-content2 px-4 py-2">
         <div className="flex flex-1 flex-col gap-1">
           <textarea
             value={argsText}
@@ -430,31 +431,33 @@ export function PadEditorInner({
             }
             disabled={!language.piston}
             rows={2}
-            className="resize-none rounded border border-zinc-300 bg-white px-3 py-1.5 font-mono text-sm dark:border-zinc-700 dark:bg-zinc-800 disabled:opacity-50"
+            className="resize-none rounded border border-divider bg-content1 px-3 py-1.5 font-mono text-sm disabled:opacity-50"
           />
           {language.piston ? (
-            <span className="text-[11px] text-zinc-500">
+            <span className="text-[11px] text-default-500">
               {language.piston.argsHint}
             </span>
           ) : null}
         </div>
         <div className="flex flex-col gap-2">
-          <button
+          <Button
             type="button"
-            onClick={runCode}
-            disabled={!language.piston || running}
-            className="rounded bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+            onPress={runCode}
+            isDisabled={!language.piston || running}
+            variant="primary"
+            size="sm"
           >
             {running ? "Running…" : "Run ▶"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            onClick={() => setOutput(null)}
-            disabled={running || output === null}
-            className="rounded border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            onPress={() => setOutput(null)}
+            isDisabled={running || output === null}
+            variant="outline"
+            size="sm"
           >
             Clear
-          </button>
+          </Button>
         </div>
       </div>
 
