@@ -175,6 +175,25 @@ start of related work to avoid repeating the same mistakes.
 
 ---
 
+## Piston
+
+### Per-job timeouts the API enforces are *ceilings*, not defaults
+- **Symptom**: `/api/run` returns 502 `piston_error` with body
+  `{"message":"run_timeout cannot exceed the configured limit of 3000"}`
+  the moment the client passes `run_timeout > 3000` (or
+  `compile_timeout` similarly).
+- **Cause**: Piston exposes `PISTON_RUN_TIMEOUT` /
+  `PISTON_COMPILE_TIMEOUT` env vars on the container. They default to
+  3000ms / 10000ms and act as **upper bounds** on whatever the request
+  payload asks for. Anything larger is refused at the API layer before the
+  process is ever launched.
+- **Fix**: bump the env vars in compose so they sit above the largest value
+  your app may legitimately send, e.g. `PISTON_RUN_TIMEOUT=30000`. Recreate
+  the container (`pnpm piston:down && pnpm piston:up`) — env changes do
+  not apply to existing containers.
+
+---
+
 ## Node.js networking
 
 ### `localhost` from Node fetch refuses to Docker-published ports

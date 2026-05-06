@@ -35,6 +35,10 @@ services:
       PISTON_LOG_LEVEL: INFO
       PISTON_BIND_ADDRESS: 0.0.0.0:2000
       PISTON_DISABLE_NETWORKING: "true" # executed code cannot make outbound calls
+      # Per-job ceilings the API enforces. Must be >= the values our /api/run
+      # passes (RUN_TIMEOUT_MS / COMPILE_TIMEOUT_MS) or Piston returns 400.
+      PISTON_RUN_TIMEOUT: "30000"
+      PISTON_COMPILE_TIMEOUT: "30000"
     volumes:
       - piston_packages:/piston/packages
       - piston_jobs:/piston/jobs
