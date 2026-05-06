@@ -1,0 +1,42 @@
+node_modules
+**/node_modules
+
+.git
+.github
+.next
+**/.next
+dist
+**/dist
+.turbo
+build
+**/build
+
+.env
+.env.local
+.env.*.local
+
+# Wallet ships into the container via a bind mount, never via image layer.
+wallet
+*.sso
+*.p12
+*.pem
+*.jks
+
+# LevelDB / runtime data
+data
+**/data
+caddy_data
+caddy_config
+
+# Docs / tasks / tests not needed at runtime
+tasks
+docs
+**/*.test.ts
+**/*.test.tsx
+**/test
+**/scripts
+
+*.log
+.DS_Store
+.vscode
+.idea

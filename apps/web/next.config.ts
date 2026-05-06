@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
   // Self-contained server bundle for Docker — copies only the runtime deps
   // each route actually uses, so the production image stays slim.
   output: "standalone",
+  // Monorepo: tracing must walk up to the workspace root to pick up shared
+  // packages (@piepad/db) and the right node_modules layout.
+  outputFileTracingRoot: path.resolve(here, "../../"),
 };
 
 export default nextConfig;
