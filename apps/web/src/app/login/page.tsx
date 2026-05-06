@@ -1,4 +1,5 @@
 import { signIn } from "@/auth";
+import { Button, Card } from "@heroui/react";
 
 interface PageProps {
   searchParams: Promise<{ callbackUrl?: string; error?: string }>;
@@ -10,32 +11,35 @@ export default async function LoginPage({ searchParams }: PageProps) {
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-6 p-8">
       <h1 className="text-4xl font-bold tracking-tight">PiePad</h1>
-      <p className="text-zinc-600 dark:text-zinc-400">
-        Real-time collaborative notepad
-      </p>
+      <p className="text-default-500">Real-time collaborative notepad</p>
 
-      {error ? (
-        <p className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-          Sign-in failed ({error}). Try again.
-        </p>
-      ) : null}
+      <Card className="w-full max-w-sm">
+        <Card.Header className="flex flex-col items-start gap-1 pb-0">
+          <h2 className="text-lg font-semibold">Sign in</h2>
+          <p className="text-sm text-default-500">
+            Use a Google account to continue.
+          </p>
+        </Card.Header>
+        <Card.Content className="flex flex-col gap-3">
+          {error ? (
+            <p className="rounded-medium border border-danger-300 bg-danger-50 px-3 py-2 text-sm text-danger-700">
+              Sign-in failed ({error}). Try again.
+            </p>
+          ) : null}
 
-      <form
-        action={async () => {
-          "use server";
-          await signIn("google", {
-            redirectTo: callbackUrl ?? "/",
-          });
-        }}
-      >
-        <button
-          type="submit"
-          className="flex items-center gap-3 rounded-lg border border-zinc-300 bg-white px-6 py-3 text-sm font-medium text-zinc-800 shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-        >
-          <GoogleMark />
-          Continue with Google
-        </button>
-      </form>
+          <form
+            action={async () => {
+              "use server";
+              await signIn("google", { redirectTo: callbackUrl ?? "/" });
+            }}
+          >
+            <Button type="submit" variant="outline" fullWidth>
+              <GoogleMark />
+              Continue with Google
+            </Button>
+          </form>
+        </Card.Content>
+      </Card>
     </main>
   );
 }
