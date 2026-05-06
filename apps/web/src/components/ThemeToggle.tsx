@@ -26,8 +26,10 @@ export function ThemeToggle() {
       aria-label={label}
       onPress={() => setTheme(next)}
     >
+      {/* State-based: show the current mode (dark → moon, light → sun).
+          Click flips to the opposite. */}
       <span aria-hidden suppressHydrationWarning>
-        {isDark ? "☀️" : "🌙"}
+        {isDark ? "🌙" : "☀️"}
       </span>
     </Button>
   );
