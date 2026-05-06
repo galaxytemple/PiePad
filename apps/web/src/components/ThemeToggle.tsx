@@ -2,34 +2,32 @@
 
 import { Button } from "@heroui/react";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
 
+// CSS-only icon driven by the .dark class on <html>: always reflects the
+// actually applied theme, even when next-themes' hook value is briefly
+// undefined right after a client-side navigation. Click reads the DOM
+// directly so the toggle never disagrees with what the user sees.
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
-  // next-themes can't know the resolved theme until the client mounts. To
-  // avoid SSR/CSR icon mismatch we always render the moon glyph on first
-  // paint and let useEffect swap it once the real theme is known. Keeping
-  // a real icon (not a placeholder dot) means the button always looks
-  // right and is always hittable.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const { setTheme } = useTheme();
 
-  const isDark = mounted && theme === "dark";
-  const next = isDark ? "light" : "dark";
-  const label = isDark ? "Switch to light mode" : "Switch to dark mode";
+  const handlePress = () => {
+    const isDark = document.documentElement.classList.contains("dark");
+    setTheme(isDark ? "light" : "dark");
+  };
 
   return (
     <Button
       isIconOnly
       variant="outline"
       size="sm"
-      aria-label={label}
-      onPress={() => setTheme(next)}
+      aria-label="Toggle theme"
+      onPress={handlePress}
     >
-      {/* State-based: show the current mode (dark → moon, light → sun).
-          Click flips to the opposite. */}
-      <span aria-hidden suppressHydrationWarning>
-        {isDark ? "🌙" : "☀️"}
+      <span className="dark:hidden" aria-hidden>
+        ☀️
+      </span>
+      <span className="hidden dark:inline" aria-hidden>
+        🌙
       </span>
     </Button>
   );
