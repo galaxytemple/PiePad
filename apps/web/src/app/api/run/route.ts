@@ -135,6 +135,10 @@ export async function POST(req: Request): Promise<NextResponse> {
     if (err instanceof Error && err.name === "AbortError") {
       return NextResponse.json({ error: "timeout" }, { status: 504 });
     }
+    console.error("[/api/run] Piston fetch failed", {
+      url: PISTON_URL,
+      error: err,
+    });
     return NextResponse.json(
       {
         error: "piston_unreachable",
