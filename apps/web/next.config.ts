@@ -17,6 +17,10 @@ const nextConfig: NextConfig = {
   // Monorepo: tracing must walk up to the workspace root to pick up shared
   // packages (@piepad/db) and the right node_modules layout.
   outputFileTracingRoot: path.resolve(here, "../../"),
+  // 127.0.0.1 is what Playwright (and our Piston/ws-internal) use to dodge
+  // Node 17+'s IPv6-first localhost resolution; Next 16 dev rejects it
+  // unless we list it explicitly.
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
 };
 
 export default nextConfig;
