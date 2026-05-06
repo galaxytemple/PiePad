@@ -7,7 +7,12 @@ const PISTON_URL = process.env.PISTON_URL ?? "http://localhost:2000";
 const RATE_LIMIT_PER_MINUTE = Number(
   process.env.RUN_RATE_LIMIT_PER_MINUTE ?? 10
 );
-const RUN_TIMEOUT_MS = Number(process.env.RUN_TIMEOUT_MS ?? 5000);
+const RUN_TIMEOUT_MS = Number(process.env.RUN_TIMEOUT_MS ?? 30_000);
+const COMPILE_TIMEOUT_MS = Number(
+  process.env.COMPILE_TIMEOUT_MS ?? RUN_TIMEOUT_MS
+);
+// Margin so Piston's own kill-on-timeout fires before our fetch aborts.
+const FETCH_ABORT_MARGIN_MS = 5_000;
 
 const RunSchema = z.object({
   language: z.string().min(1).max(50),
@@ -86,7 +91,9 @@ export async function POST(req: Request): Promise<NextResponse> {
   const { language, version, code, stdin } = parsed.data;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), RUN_TIMEOUT_MS + 5_000);
+  const totalBudgetMs =
+    RUN_TIMEOUT_MS + COMPILE_TIMEOUT_MS + FETCH_ABORT_MARGIN_MS;
+  const timer = setTimeout(() => controller.abort(), totalBudgetMs);
 
   try {
     const pistonRes = await fetch(`${PISTON_URL}/api/v2/execute`, {
@@ -99,7 +106,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         files: [{ content: code }],
         stdin: stdin ?? "",
         run_timeout: RUN_TIMEOUT_MS,
-        compile_timeout: RUN_TIMEOUT_MS * 2,
+        compile_timeout: COMPILE_TIMEOUT_MS,
       }),
     });
 
