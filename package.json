@@ -6,6 +6,8 @@
   "scripts": {
     "dev:web": "pnpm --filter @piepad/web dev",
     "dev:ws": "pnpm --filter @piepad/ws dev",
+    "dev:cleanup": "pnpm --filter @piepad/cleanup dev",
+    "cleanup:once": "pnpm --filter @piepad/cleanup run:once",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",

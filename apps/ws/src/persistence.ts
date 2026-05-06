@@ -125,3 +125,11 @@ export const persistence: Persistence = {
 export async function closeLeveldb(): Promise<void> {
   await ldb.destroy();
 }
+
+export async function dropLeveldbDoc(roomId: string): Promise<void> {
+  try {
+    await ldb.clearDocument(roomId);
+  } catch (err) {
+    console.error(`[persistence] clearDocument failed for ${roomId}:`, err);
+  }
+}

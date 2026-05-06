@@ -352,6 +352,52 @@ export async function renameRoom(
   });
 }
 
+export interface ExpiredRoomRow {
+  id: string;
+  name: string;
+  lastAccessedAt: Date;
+}
+
+export async function listExpiredRooms(
+  ttlDays: number,
+  limit = 500
+): Promise<ExpiredRoomRow[]> {
+  const safeDays = Math.max(1, Math.min(3650, Math.floor(ttlDays)));
+  const safeLimit = Math.max(1, Math.min(5000, Math.floor(limit)));
+  return withConnection(async (conn) => {
+    type Row = { ID: string; NAME: string; LAST_ACCESSED_AT: Date };
+    const result = await conn.execute<Row>(
+      `SELECT id, name, last_accessed_at
+         FROM rooms
+        WHERE last_accessed_at < SYSTIMESTAMP - INTERVAL '${safeDays}' DAY
+        ORDER BY last_accessed_at ASC
+        FETCH FIRST ${safeLimit} ROWS ONLY`,
+      {},
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return (result.rows ?? []).map((r) => ({
+      id: r.ID,
+      name: r.NAME,
+      lastAccessedAt: r.LAST_ACCESSED_AT,
+    }));
+  });
+}
+
+export async function recordRoomDeletion(
+  roomId: string,
+  roomName: string,
+  reason: "30_DAY_INACTIVITY" | "ADMIN_DELETE"
+): Promise<void> {
+  await withConnection(async (conn) => {
+    await conn.execute(
+      `INSERT INTO room_deletions (room_id, room_name, reason)
+       VALUES (:roomId, :roomName, :reason)`,
+      { roomId, roomName, reason },
+      { autoCommit: true }
+    );
+  });
+}
+
 export async function deleteRoom(roomId: string): Promise<void> {
   // FK ON DELETE CASCADE on room_visits and room_snapshots cleans up
   // dependent rows automatically.

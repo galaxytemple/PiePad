@@ -146,12 +146,23 @@ Real-time collaborative notepad with code execution, deployed on OCI Free Tier.
 - [ ] Set `ADMIN_EMAILS=sanghoon@giboo.com[,...]`
 - [ ] `pnpm db:migrate` to apply V3
 
-## Phase 5 — Lifecycle Cleanup
+## Phase 5 — Lifecycle Cleanup ✅
 
-- [ ] `apps/cleanup` cron container (runs daily at 03:00 UTC)
-- [ ] Query rooms where `last_accessed_at < now - 30d` → delete row + LevelDB entry
-- [ ] Cascade deletes `room_snapshots`
-- [ ] Audit log table `room_deletions` for traceability
+- [x] `apps/cleanup` long-running node-cron service (default `0 3 * * *` UTC,
+      tunable via `CLEANUP_CRON`); catch-up sweep on start unless
+      `CLEANUP_RUN_ON_START=false`. Single-flight guard so a slow run can't
+      overlap the next tick.
+- [x] `packages/db.listExpiredRooms(ttlDays)` queries
+      `last_accessed_at < SYSTIMESTAMP - INTERVAL N DAY`; clamped 1..3650d
+      and 1..5000 rows.
+- [x] Each expired room: ws `/internal/evict` (broadcasts meta.deleted +
+      drops LevelDB entry) → DELETE rooms (FK CASCADE wipes visits +
+      snapshots) → INSERT `room_deletions` audit row with reason
+      `30_DAY_INACTIVITY`.
+- [x] `evictRoom` extended: persistence module exposes `dropLeveldbDoc` so
+      eviction also clears LevelDB even when no doc was in memory (covers
+      dormant rooms that never had an active connection during cleanup).
+- [x] `pnpm cleanup:once` for ad-hoc runs / dry runs of the cron path.
 
 ## Phase 6 — Infra & CI/CD
 

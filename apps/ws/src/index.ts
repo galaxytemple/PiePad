@@ -60,9 +60,9 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ error: "missing_roomId" }));
         return;
       }
-      const evicted = evictRoom(body.roomId, body.reason ?? "deleted");
+      const result = await evictRoom(body.roomId, body.reason ?? "deleted");
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ok: true, evicted }));
+      res.end(JSON.stringify({ ok: true, ...result }));
     } catch (err) {
       console.error("[/internal/evict] failed", err);
       res.writeHead(500);
