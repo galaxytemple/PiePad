@@ -9,7 +9,7 @@ const PadEditorInner = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex flex-1 items-center justify-center text-sm text-zinc-500">
+      <div className="flex h-screen items-center justify-center text-sm text-zinc-500">
         Loading editor…
       </div>
     ),

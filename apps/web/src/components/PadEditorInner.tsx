@@ -112,7 +112,7 @@ export function PadEditorInner({ roomId }: { roomId: string }) {
   };
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex h-screen flex-col">
       <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-6 py-3 dark:border-zinc-800 dark:bg-zinc-900">
         <div className="flex items-center gap-3">
           <span className="font-mono text-sm text-zinc-500">/pad/{roomId}</span>
@@ -137,7 +137,7 @@ export function PadEditorInner({ roomId }: { roomId: string }) {
           ))}
         </div>
       </header>
-      <div className="flex-1">
+      <div className="min-h-0 flex-1">
         <Editor
           height="100%"
           defaultLanguage="javascript"
