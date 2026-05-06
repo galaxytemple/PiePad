@@ -64,7 +64,7 @@ export function PadEditorInner({ roomId }: { roomId: string }) {
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [users, setUsers] = useState<AwarenessUser[]>([]);
   const [languageId, setLanguageId] = useState<string>(DEFAULT_LANGUAGE_ID);
-  const [stdin, setStdin] = useState<string>("");
+  const [argsText, setArgsText] = useState<string>("");
   const [running, setRunning] = useState<boolean>(false);
   const [output, setOutput] = useState<RunResult | RunError | null>(null);
 
@@ -156,6 +156,10 @@ export function PadEditorInner({ roomId }: { roomId: string }) {
     const ydoc = ydocRef.current;
     if (!ydoc) return;
     const code = ydoc.getText("content").toString();
+    const args = argsText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
     setRunning(true);
     setOutput(null);
     const startedAt = performance.now();
@@ -167,7 +171,7 @@ export function PadEditorInner({ roomId }: { roomId: string }) {
           language: language.piston.language,
           version: language.piston.version,
           code,
-          stdin,
+          args,
         }),
       });
       const json = (await res.json()) as RunResult | RunError;
@@ -185,7 +189,7 @@ export function PadEditorInner({ roomId }: { roomId: string }) {
     } finally {
       setRunning(false);
     }
-  }, [language, stdin]);
+  }, [language, argsText]);
 
   return (
     <div className="flex h-screen flex-col">
@@ -241,35 +245,44 @@ export function PadEditorInner({ roomId }: { roomId: string }) {
         />
       </div>
 
-      <div className="flex items-center gap-2 border-t border-zinc-200 bg-zinc-50 px-4 py-2 dark:border-zinc-800 dark:bg-zinc-900">
-        <input
-          type="text"
-          value={stdin}
-          onChange={(e) => setStdin(e.target.value)}
-          placeholder={
-            language.piston
-              ? "stdin (newlines as \\n)"
-              : `${language.label} is not runnable`
-          }
-          disabled={!language.piston}
-          className="flex-1 rounded border border-zinc-300 bg-white px-3 py-1.5 font-mono text-sm dark:border-zinc-700 dark:bg-zinc-800 disabled:opacity-50"
-        />
-        <button
-          type="button"
-          onClick={runCode}
-          disabled={!language.piston || running}
-          className="rounded bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-        >
-          {running ? "Running…" : "Run ▶"}
-        </button>
-        <button
-          type="button"
-          onClick={() => setOutput(null)}
-          disabled={running || output === null}
-          className="rounded border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-        >
-          Clear
-        </button>
+      <div className="flex items-start gap-2 border-t border-zinc-200 bg-zinc-50 px-4 py-2 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex flex-1 flex-col gap-1">
+          <textarea
+            value={argsText}
+            onChange={(e) => setArgsText(e.target.value)}
+            placeholder={
+              language.piston
+                ? "args — one per line (passed as command-line arguments)"
+                : `${language.label} is not runnable`
+            }
+            disabled={!language.piston}
+            rows={2}
+            className="resize-none rounded border border-zinc-300 bg-white px-3 py-1.5 font-mono text-sm dark:border-zinc-700 dark:bg-zinc-800 disabled:opacity-50"
+          />
+          {language.piston ? (
+            <span className="text-[11px] text-zinc-500">
+              {language.piston.argsHint}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={runCode}
+            disabled={!language.piston || running}
+            className="rounded bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {running ? "Running…" : "Run ▶"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setOutput(null)}
+            disabled={running || output === null}
+            className="rounded border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+          >
+            Clear
+          </button>
+        </div>
       </div>
 
       <OutputPanel result={output} />

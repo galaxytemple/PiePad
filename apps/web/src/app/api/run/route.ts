@@ -21,7 +21,7 @@ const RunSchema = z.object({
   language: z.string().min(1).max(50),
   version: z.string().min(1).max(50).default("*"),
   code: z.string().max(64 * 1024),
-  stdin: z.string().max(8 * 1024).optional(),
+  args: z.array(z.string().max(2048)).max(50).optional(),
 });
 
 interface PistonStream {
@@ -91,7 +91,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
-  const { language, version, code, stdin } = parsed.data;
+  const { language, version, code, args } = parsed.data;
 
   const controller = new AbortController();
   const totalBudgetMs =
@@ -107,7 +107,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         language,
         version,
         files: [{ content: code }],
-        stdin: stdin ?? "",
+        args: args ?? [],
         run_timeout: RUN_TIMEOUT_MS,
         compile_timeout: COMPILE_TIMEOUT_MS,
       }),
