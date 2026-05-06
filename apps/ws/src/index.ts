@@ -1,6 +1,17 @@
+import "./env.js";
+
+import { closePool } from "@piepad/db";
 import http from "node:http";
 import { WebSocketServer } from "ws";
-import { setupWSConnection } from "y-websocket/bin/utils";
+import { setPersistence, setupWSConnection } from "y-websocket/bin/utils";
+import { closeLeveldb, persistence } from "./persistence.js";
+import {
+  startSnapshotWorker,
+  stopSnapshotWorker,
+} from "./snapshot-worker.js";
+
+setPersistence(persistence);
+startSnapshotWorker();
 
 const PORT = Number(process.env.WS_PORT ?? 1234);
 const HOST = process.env.WS_HOST ?? "0.0.0.0";
@@ -25,11 +36,21 @@ server.listen(PORT, HOST, () => {
   console.log(`piepad-ws listening on http://${HOST}:${PORT}`);
 });
 
-const shutdown = (signal: NodeJS.Signals) => {
+let shuttingDown = false;
+const shutdown = async (signal: NodeJS.Signals) => {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log(`piepad-ws received ${signal}, shutting down`);
-  wss.close(() => {
-    server.close(() => process.exit(0));
+  stopSnapshotWorker();
+  for (const client of wss.clients) {
+    client.close();
+  }
+  await new Promise<void>((resolve) => {
+    server.close(() => resolve());
   });
+  await closeLeveldb().catch(() => {});
+  await closePool().catch(() => {});
+  process.exit(0);
 };
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

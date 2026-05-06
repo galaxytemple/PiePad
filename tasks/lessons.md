@@ -72,6 +72,40 @@ start of related work to avoid repeating the same mistakes.
 
 ---
 
+## Node.js / ESM-CJS interop
+
+### Dual-package libraries can silently load twice
+- **Symptom**: `Yjs was already imported. This breaks constructor checks and
+  will lead to issues!` printed at server start. Subtle bugs follow:
+  `instanceof` checks across module boundaries return false, leading to
+  malformed CRDT state or "expected Y.Doc" type errors.
+- **Cause**: A library publishes both ESM (`"module": "..."` or
+  `"exports": { "import": "..." }`) and CJS (`"main"` or
+  `"exports": { "require": "..." }`) entry points. Node's ESM loader and CJS
+  `require()` chain each instantiate the library separately. If one part of
+  your app imports it via ESM and another via CJS (e.g. through a transitive
+  dependency that uses `require`), you end up with two module instances
+  sharing the same name and version.
+- **Concrete trigger here**: `y-websocket/bin/utils.cjs` does
+  `require("yjs")` (CJS). Our app initially did `import * as Y from "yjs"`
+  (ESM) and `import { LeveldbPersistence } from "y-leveldb"` — and y-leveldb
+  is itself dual-package, so its ESM entry pulled yjs's ESM entry.
+- **Fix**: Force the ambiguous packages through `createRequire` so every
+  caller hits the CJS module cache:
+  ```ts
+  import { createRequire } from "node:module";
+  import type * as YType from "yjs";
+  const requireCjs = createRequire(import.meta.url);
+  const Y: typeof YType = requireCjs("yjs");
+  const { LeveldbPersistence } =
+    requireCjs("y-leveldb") as typeof import("y-leveldb");
+  ```
+- **Detection**: also surfaces as "yjs is loaded twice" / "package vendored"
+  warnings, or weird transactional state issues. Suspect any time you mix
+  Node ESM with libraries whose internals use `require`.
+
+---
+
 ## Next.js (App Router)
 
 ### `'use client'` is not enough when an imported module touches `window` at top level

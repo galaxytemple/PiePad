@@ -41,15 +41,24 @@ Real-time collaborative notepad with code execution, deployed on OCI Free Tier.
 - [x] Room URL pattern: `/pad/[roomId]` (Next.js 16 async `params`)
 - [x] Minimal y-websocket server in `apps/ws` (in-memory only — LevelDB/Oracle land in Phase 2)
 
-## Phase 2 — Persistence Layer
+## Phase 2 — Persistence Layer ✅
 
-- [ ] `apps/ws` y-websocket server (Node.js, ARM-compatible)
-- [ ] `y-leveldb` adapter, volume-mounted at `/data/yjs`
-- [ ] Snapshot worker:
-  - [ ] Debounced 30s tick → `Y.encodeStateAsUpdate` → BLOB into `room_snapshots`
-  - [ ] On last-client-disconnect → final snapshot
-  - [ ] Update `rooms.last_accessed_at` on every connect
-- [ ] Boot path: load latest snapshot from Oracle DB if LevelDB entry missing (disaster recovery)
+- [x] `packages/db` Oracle helper module: pool, withConnection, ensureRoom,
+      touchRoomAccess, getLatestSnapshot, saveSnapshot (MERGE upsert)
+- [x] V2 migration: UNIQUE(room_id) on room_snapshots so saveSnapshot upserts
+      (one snapshot per room — periodic ticks would otherwise grow unbounded)
+- [x] `y-leveldb` adapter, volume-mounted at `/data/yjs` (dev: `./data/yjs`)
+- [x] Custom y-websocket Persistence wired via `setPersistence`:
+  - [x] `bindState`: load LevelDB → fall back to Oracle snapshot if empty,
+        subscribe to updates (LevelDB write + dirty marker), fire-and-forget
+        ensureRoom + touchRoomAccess
+  - [x] `writeState` on last-client-disconnect → final Oracle snapshot
+- [x] Snapshot worker on `SNAPSHOT_INTERVAL_MS` (default 30s): iterate dirty
+      docs from `y-websocket/bin/utils` `docs` Map, upsert via `saveSnapshot`
+- [x] Boot path: cold-start recovery from Oracle when LevelDB has no entry
+- [x] dotenv-loaded project-root `.env` via top-level side-effect import
+- [x] CJS unification (`createRequire`) for `yjs` + `y-leveldb` to avoid the
+      "Yjs was already imported" dual-instance warning
 
 ## Phase 3 — Self-hosted Piston
 
