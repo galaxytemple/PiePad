@@ -1,12 +1,13 @@
 # PiePad — Docker Compose
 #
-# Phases:
-#   - tools profile: one-shot Flyway migrate/info/validate
-#   - default profile (TODO): caddy / web / ws / piston / cleanup
+# Profiles:
+#   tools    — one-shot Flyway migrate/info/validate
+#   runtime  — long-running services used during dev (currently: piston)
+#   (default) — production stack (TODO: caddy / web / ws / cleanup)
 #
-# Run from repo root via package.json scripts (pnpm db:migrate etc).
-# Scripts pass --env-file .env so ${...} interpolation below resolves
-# from the project-root .env, not docker/.env (compose default).
+# Run from repo root via package.json scripts (pnpm db:migrate, pnpm piston:up).
+# Scripts pass --env-file .env so ${...} interpolation below resolves from the
+# project-root .env, not docker/.env (compose default).
 
 services:
   flyway:
@@ -21,3 +22,23 @@ services:
       - ../db/flyway.conf:/flyway/conf/flyway.conf:ro
       - ../wallet:/wallet:ro
     command: ["-configFiles=/flyway/conf/flyway.conf", "info"]
+
+  piston:
+    image: ghcr.io/engineer-man/piston:latest
+    profiles: ["runtime"]
+    container_name: piepad-piston
+    restart: unless-stopped
+    privileged: true # nsjail isolation primitives require root capabilities
+    ports:
+      - "2000:2000" # dev convenience; in prod, web container talks to piston:2000 via the internal network only
+    environment:
+      PISTON_LOG_LEVEL: INFO
+      PISTON_BIND_ADDRESS: 0.0.0.0:2000
+      PISTON_DISABLE_NETWORKING: "true" # executed code cannot make outbound calls
+    volumes:
+      - piston_packages:/piston/packages
+      - piston_jobs:/piston/jobs
+
+volumes:
+  piston_packages:
+  piston_jobs:

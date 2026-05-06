@@ -60,14 +60,25 @@ Real-time collaborative notepad with code execution, deployed on OCI Free Tier.
 - [x] CJS unification (`createRequire`) for `yjs` + `y-leveldb` to avoid the
       "Yjs was already imported" dual-instance warning
 
-## Phase 3 — Self-hosted Piston
+## Phase 3 — Self-hosted Piston ✅
 
-- [ ] `engineer-man/piston` Docker image (verify ARM64 support; fallback: build from source)
-- [ ] Internal-only network exposure (no public port)
-- [ ] Pre-install language packages on first boot (Python, Node, Go, Java, C++)
-- [ ] Next.js API route `/api/run` → Piston `/api/v2/execute`
-- [ ] UI: stdin textarea, stdout/stderr panel, runtime display
-- [ ] Per-IP rate limiting on `/api/run`
+- [x] `ghcr.io/engineer-man/piston:latest` (multi-arch, ARM64 OK) under
+      compose `runtime` profile, privileged for nsjail, networking disabled
+      for executed code, packages persisted in `piston_packages` volume
+- [x] Dev port `2000` published; prod will reach piston only on the internal
+      network via `PISTON_URL=http://piston:2000`
+- [x] One-shot installer `scripts/install-piston-langs.sh` (pinned versions)
+      wired as `pnpm piston:install`; ergonomics: `pnpm piston:up/down/logs`
+- [x] Next.js API route `POST /api/run` → Piston `/api/v2/execute`,
+      Zod-validated, AbortController-bounded, rate-limited per-IP
+      (in-memory token bucket, default 10/min — Phase 7 swaps for Redis)
+- [x] UI: shared language picker (Yjs `meta.language` Y.Map → all clients
+      in a room see the same Monaco grammar), stdin one-liner, Run button,
+      Clear button, output panel showing exit code / duration / compile
+      stderr / stdout / stderr
+- [x] Project-root `.env` shared by Next.js via `dotenv` in `next.config.ts`
+      so `apps/web` and `apps/ws` read from the same source of truth
+- [x] `NEXT_PUBLIC_WS_URL` plumbed through `.env.example`
 
 ## Phase 4 — Auth & Rooms
 
