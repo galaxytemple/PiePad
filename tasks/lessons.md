@@ -58,6 +58,27 @@ start of related work to avoid repeating the same mistakes.
   ```
   Or `GRANT DWROLE TO <user>;` for the ADB convenience role.
 
+### oracledb Thin chokes on some MERGE shapes — prefer UPDATE-then-INSERT
+- **Symptom**: `ORA-00923: FROM keyword not found where expected` on a MERGE
+  statement that parses fine in SQL Developer / DBeaver. Stack points at
+  the `conn.execute` call, not the SQL.
+- **Cause**: oracledb's Thin SQL parser/binder can mangle MERGE statements
+  that re-use bind names across the USING SELECT and the INSERT/UPDATE
+  branches (e.g. `:userId` referenced both in `SELECT :userId AS uid FROM
+  dual` and `VALUES (:userId, ...)`). The error message is opaque because
+  the rewriting happens before Oracle ever sees the SQL.
+- **Fix**: for two-row idempotent upserts, just do an UPDATE first and
+  INSERT only if `rowsAffected === 0`. Two round-trips, plain ANSI, no
+  bind aliasing tricks. (Pure-INSERT MERGEs without bind reuse, like our
+  `ensureRoom`, are unaffected.)
+
+### `FETCH FIRST :n ROWS ONLY` with a bind in oracledb Thin is brittle
+- **Symptom**: same `ORA-00923` family of parse errors, this time on
+  pagination queries.
+- **Fix**: clamp `n` server-side and interpolate it as a literal — the
+  number is server-controlled so there's no injection surface. Reserve
+  binds for actual user input.
+
 ### Wallet `sqlnet.ora` `?/network/admin` placeholder breaks in containers
 - **Symptom**: `ORA-12578: TNS:wallet open failed` or similar SSL/wallet errors
   when running JDBC/oracledb from Docker.

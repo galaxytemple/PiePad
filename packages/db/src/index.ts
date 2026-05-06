@@ -238,20 +238,26 @@ export async function upsertRoomVisit(
   userId: number,
   roomId: string
 ): Promise<void> {
+  // UPDATE-then-INSERT instead of MERGE: Oracle's MERGE with re-used
+  // bind names tripped ORA-00923 ("FROM keyword not found") in the
+  // node-oracledb Thin driver. This split is two round-trips but plain
+  // ANSI and bulletproof.
   await withConnection(async (conn) => {
-    await conn.execute(
-      `MERGE INTO room_visits v
-         USING (SELECT :userId AS uid, :roomId AS rid FROM dual) src
-         ON (v.user_id = src.uid AND v.room_id = src.rid)
-       WHEN MATCHED THEN
-         UPDATE SET last_visited_at = CURRENT_TIMESTAMP,
-                    visit_count = v.visit_count + 1
-       WHEN NOT MATCHED THEN
-         INSERT (user_id, room_id, first_visited_at, last_visited_at, visit_count)
-         VALUES (:userId, :roomId, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)`,
-      { userId, roomId },
-      { autoCommit: true }
+    const updated = await conn.execute(
+      `UPDATE room_visits
+          SET last_visited_at = CURRENT_TIMESTAMP,
+              visit_count = visit_count + 1
+        WHERE user_id = :userId AND room_id = :roomId`,
+      { userId, roomId }
     );
+    if ((updated.rowsAffected ?? 0) === 0) {
+      await conn.execute(
+        `INSERT INTO room_visits (user_id, room_id)
+         VALUES (:userId, :roomId)`,
+        { userId, roomId }
+      );
+    }
+    await conn.commit();
   });
 }
 
@@ -300,6 +306,9 @@ export async function listRoomsCreatedByUser(
   userId: number,
   limit = 50
 ): Promise<RoomRow[]> {
+  // FETCH FIRST :lim ROWS ONLY with a bind variable can choke in oracledb
+  // Thin; safe to interpolate since `limit` is a server-controlled number.
+  const safeLimit = Math.max(1, Math.min(1000, Math.floor(limit)));
   return withConnection(async (conn) => {
     type Row = {
       ID: string;
@@ -316,8 +325,8 @@ export async function listRoomsCreatedByUser(
          FROM rooms
         WHERE created_by_user_id = :userId
         ORDER BY last_accessed_at DESC
-        FETCH FIRST :lim ROWS ONLY`,
-      { userId, lim: limit },
+        FETCH FIRST ${safeLimit} ROWS ONLY`,
+      { userId },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
     return (result.rows ?? []).map((row) => ({
@@ -341,6 +350,7 @@ export async function listRoomsVisitedByUser(
   userId: number,
   limit = 50
 ): Promise<VisitedRoomRow[]> {
+  const safeLimit = Math.max(1, Math.min(1000, Math.floor(limit)));
   return withConnection(async (conn) => {
     type Row = {
       ID: string;
@@ -362,8 +372,8 @@ export async function listRoomsVisitedByUser(
          JOIN rooms r ON r.id = v.room_id
         WHERE v.user_id = :userId
         ORDER BY v.last_visited_at DESC
-        FETCH FIRST :lim ROWS ONLY`,
-      { userId, lim: limit },
+        FETCH FIRST ${safeLimit} ROWS ONLY`,
+      { userId },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
     return (result.rows ?? []).map((row) => ({
