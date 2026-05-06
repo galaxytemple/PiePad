@@ -16,6 +16,13 @@ const PadEditorInner = dynamic(
   }
 );
 
-export function PadEditor({ roomId }: { roomId: string }) {
-  return <PadEditorInner roomId={roomId} />;
+export interface PadEditorProps {
+  roomId: string;
+  roomName: string;
+  isOwner: boolean;
+  user: { name: string; avatarUrl: string | null };
+}
+
+export function PadEditor(props: PadEditorProps) {
+  return <PadEditorInner {...props} />;
 }

@@ -21,10 +21,7 @@ const PALETTE = [
   "#ec4899",
 ] as const;
 
-const ADJECTIVES = ["Quick", "Lazy", "Brave", "Calm", "Wild", "Bright"] as const;
-const ANIMALS = ["Otter", "Fox", "Owl", "Cat", "Wolf", "Bear"] as const;
-
-type AwarenessUser = { name: string; color: string };
+type AwarenessUser = { name: string; color: string; avatarUrl: string | null };
 type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
 const STATUS_STYLES: Record<ConnectionStatus, string> = {
@@ -53,14 +50,30 @@ function pickRandom<T>(items: readonly T[]): T {
   return items[idx] as T;
 }
 
-function makeAnonUser(): AwarenessUser {
-  return {
-    name: `${pickRandom(ADJECTIVES)}-${pickRandom(ANIMALS)}`,
-    color: pickRandom(PALETTE),
-  };
+// Stable color per logged-in identity so my pill colour does not flicker
+// across reconnects within the same tab. Hash the name into the palette.
+function colorFor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  }
+  const idx = Math.abs(hash) % PALETTE.length;
+  return PALETTE[idx] as string;
 }
 
-export function PadEditorInner({ roomId }: { roomId: string }) {
+interface PadEditorInnerProps {
+  roomId: string;
+  roomName: string;
+  isOwner: boolean;
+  user: { name: string; avatarUrl: string | null };
+}
+
+export function PadEditorInner({
+  roomId,
+  roomName,
+  isOwner,
+  user: viewer,
+}: PadEditorInnerProps) {
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [users, setUsers] = useState<AwarenessUser[]>([]);
   const [languageId, setLanguageId] = useState<string>(DEFAULT_LANGUAGE_ID);
@@ -68,7 +81,14 @@ export function PadEditorInner({ roomId }: { roomId: string }) {
   const [running, setRunning] = useState<boolean>(false);
   const [output, setOutput] = useState<RunResult | RunError | null>(null);
 
-  const localUser = useMemo<AwarenessUser>(() => makeAnonUser(), []);
+  const localUser = useMemo<AwarenessUser>(
+    () => ({
+      name: viewer.name,
+      color: colorFor(viewer.name),
+      avatarUrl: viewer.avatarUrl,
+    }),
+    [viewer.name, viewer.avatarUrl]
+  );
   const ydocRef = useRef<Y.Doc | null>(null);
   const providerRef = useRef<WebsocketProvider | null>(null);
   const bindingRef = useRef<MonacoBinding | null>(null);
@@ -91,13 +111,20 @@ export function PadEditorInner({ roomId }: { roomId: string }) {
     const refreshUsers = () => {
       const list: AwarenessUser[] = [];
       for (const state of provider.awareness.getStates().values()) {
-        const candidate = (state as { user?: unknown }).user;
+        const candidate = (state as { user?: Partial<AwarenessUser> }).user;
         if (
           candidate &&
-          typeof (candidate as AwarenessUser).name === "string" &&
-          typeof (candidate as AwarenessUser).color === "string"
+          typeof candidate.name === "string" &&
+          typeof candidate.color === "string"
         ) {
-          list.push(candidate as AwarenessUser);
+          list.push({
+            name: candidate.name,
+            color: candidate.color,
+            avatarUrl:
+              typeof candidate.avatarUrl === "string"
+                ? candidate.avatarUrl
+                : null,
+          });
         }
       }
       setUsers(list);
@@ -195,7 +222,20 @@ export function PadEditorInner({ roomId }: { roomId: string }) {
     <div className="flex h-screen flex-col">
       <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-6 py-3 dark:border-zinc-800 dark:bg-zinc-900">
         <div className="flex items-center gap-3">
-          <span className="font-mono text-sm text-zinc-500">/pad/{roomId}</span>
+          <a
+            href="/"
+            className="text-sm text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+            aria-label="Home"
+          >
+            ←
+          </a>
+          <span className="text-sm font-medium">{roomName}</span>
+          {isOwner ? (
+            <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+              owner
+            </span>
+          ) : null}
+          <span className="font-mono text-xs text-zinc-400">{roomId}</span>
           <span
             className={`rounded px-2 py-0.5 text-xs ${STATUS_STYLES[status]}`}
           >
@@ -221,10 +261,21 @@ export function PadEditorInner({ roomId }: { roomId: string }) {
               key={`${u.name}-${i}`}
               className="flex items-center gap-1.5 text-sm"
             >
-              <span
-                className="h-2 w-2 rounded-full"
-                style={{ background: u.color }}
-              />
+              {u.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={u.avatarUrl}
+                  alt=""
+                  className="h-5 w-5 rounded-full ring-2"
+                  style={{ boxShadow: `0 0 0 2px ${u.color}` }}
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ background: u.color }}
+                />
+              )}
               {u.name}
             </span>
           ))}

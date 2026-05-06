@@ -213,7 +213,8 @@ export async function getUserById(id: number): Promise<UserProfile | null> {
 
 export async function ensureRoom(
   roomId: string,
-  name?: string
+  name?: string,
+  createdByUserId?: number | null
 ): Promise<void> {
   await withConnection(async (conn) => {
     await conn.execute(
@@ -221,10 +222,161 @@ export async function ensureRoom(
          USING (SELECT :roomId AS id FROM dual) src
          ON (r.id = src.id)
        WHEN NOT MATCHED THEN
-         INSERT (id, name) VALUES (:roomId, :name)`,
-      { roomId, name: name ?? roomId },
+         INSERT (id, name, created_by_user_id)
+         VALUES (:roomId, :name, :userId)`,
+      {
+        roomId,
+        name: name ?? roomId,
+        userId: createdByUserId ?? null,
+      },
       { autoCommit: true }
     );
+  });
+}
+
+export async function upsertRoomVisit(
+  userId: number,
+  roomId: string
+): Promise<void> {
+  await withConnection(async (conn) => {
+    await conn.execute(
+      `MERGE INTO room_visits v
+         USING (SELECT :userId AS uid, :roomId AS rid FROM dual) src
+         ON (v.user_id = src.uid AND v.room_id = src.rid)
+       WHEN MATCHED THEN
+         UPDATE SET last_visited_at = CURRENT_TIMESTAMP,
+                    visit_count = v.visit_count + 1
+       WHEN NOT MATCHED THEN
+         INSERT (user_id, room_id, first_visited_at, last_visited_at, visit_count)
+         VALUES (:userId, :roomId, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)`,
+      { userId, roomId },
+      { autoCommit: true }
+    );
+  });
+}
+
+export interface RoomRow {
+  id: string;
+  name: string;
+  hasPassword: boolean;
+  createdByUserId: number | null;
+  createdAt: Date;
+  lastAccessedAt: Date;
+}
+
+export async function getRoomById(roomId: string): Promise<RoomRow | null> {
+  return withConnection(async (conn) => {
+    type Row = {
+      ID: string;
+      NAME: string;
+      HAS_PASSWORD: number;
+      CREATED_BY_USER_ID: number | null;
+      CREATED_AT: Date;
+      LAST_ACCESSED_AT: Date;
+    };
+    const result = await conn.execute<Row>(
+      `SELECT id, name,
+              CASE WHEN password_hash IS NULL THEN 0 ELSE 1 END AS has_password,
+              created_by_user_id,
+              created_at, last_accessed_at
+         FROM rooms WHERE id = :roomId`,
+      { roomId },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const row = result.rows?.[0];
+    if (!row) return null;
+    return {
+      id: row.ID,
+      name: row.NAME,
+      hasPassword: row.HAS_PASSWORD === 1,
+      createdByUserId: row.CREATED_BY_USER_ID,
+      createdAt: row.CREATED_AT,
+      lastAccessedAt: row.LAST_ACCESSED_AT,
+    };
+  });
+}
+
+export async function listRoomsCreatedByUser(
+  userId: number,
+  limit = 50
+): Promise<RoomRow[]> {
+  return withConnection(async (conn) => {
+    type Row = {
+      ID: string;
+      NAME: string;
+      HAS_PASSWORD: number;
+      CREATED_BY_USER_ID: number | null;
+      CREATED_AT: Date;
+      LAST_ACCESSED_AT: Date;
+    };
+    const result = await conn.execute<Row>(
+      `SELECT id, name,
+              CASE WHEN password_hash IS NULL THEN 0 ELSE 1 END AS has_password,
+              created_by_user_id, created_at, last_accessed_at
+         FROM rooms
+        WHERE created_by_user_id = :userId
+        ORDER BY last_accessed_at DESC
+        FETCH FIRST :lim ROWS ONLY`,
+      { userId, lim: limit },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return (result.rows ?? []).map((row) => ({
+      id: row.ID,
+      name: row.NAME,
+      hasPassword: row.HAS_PASSWORD === 1,
+      createdByUserId: row.CREATED_BY_USER_ID,
+      createdAt: row.CREATED_AT,
+      lastAccessedAt: row.LAST_ACCESSED_AT,
+    }));
+  });
+}
+
+export interface VisitedRoomRow extends RoomRow {
+  firstVisitedAt: Date;
+  lastVisitedAt: Date;
+  visitCount: number;
+}
+
+export async function listRoomsVisitedByUser(
+  userId: number,
+  limit = 50
+): Promise<VisitedRoomRow[]> {
+  return withConnection(async (conn) => {
+    type Row = {
+      ID: string;
+      NAME: string;
+      HAS_PASSWORD: number;
+      CREATED_BY_USER_ID: number | null;
+      CREATED_AT: Date;
+      LAST_ACCESSED_AT: Date;
+      FIRST_VISITED_AT: Date;
+      LAST_VISITED_AT: Date;
+      VISIT_COUNT: number;
+    };
+    const result = await conn.execute<Row>(
+      `SELECT r.id, r.name,
+              CASE WHEN r.password_hash IS NULL THEN 0 ELSE 1 END AS has_password,
+              r.created_by_user_id, r.created_at, r.last_accessed_at,
+              v.first_visited_at, v.last_visited_at, v.visit_count
+         FROM room_visits v
+         JOIN rooms r ON r.id = v.room_id
+        WHERE v.user_id = :userId
+        ORDER BY v.last_visited_at DESC
+        FETCH FIRST :lim ROWS ONLY`,
+      { userId, lim: limit },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return (result.rows ?? []).map((row) => ({
+      id: row.ID,
+      name: row.NAME,
+      hasPassword: row.HAS_PASSWORD === 1,
+      createdByUserId: row.CREATED_BY_USER_ID,
+      createdAt: row.CREATED_AT,
+      lastAccessedAt: row.LAST_ACCESSED_AT,
+      firstVisitedAt: row.FIRST_VISITED_AT,
+      lastVisitedAt: row.LAST_VISITED_AT,
+      visitCount: row.VISIT_COUNT,
+    }));
   });
 }
 
