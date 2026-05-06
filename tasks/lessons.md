@@ -106,6 +106,40 @@ start of related work to avoid repeating the same mistakes.
 
 ---
 
+## Oracle Autonomous Database (continued)
+
+### node-oracledb Thin mode cannot use `cwallet.sso` — needs the wallet password
+- **Symptom**: `NJS-511: connection to listener at host ... port 1522 was
+  refused. Cause: ORA-12506` from a Node.js process, while the same wallet,
+  same TNS alias, same network, and same user work fine in DBeaver / Flyway /
+  any JDBC client.
+- **Cause**: The ADB wallet zip contains both `cwallet.sso` (autologin SSO)
+  and `ewallet.p12` (encrypted PKCS#12). JDBC reads `cwallet.sso` and runs
+  mTLS without prompting. node-oracledb in Thin mode (the default in v6+)
+  ignores `cwallet.sso` and tries to open `ewallet.p12` — which is encrypted
+  with the password the user picked when downloading the wallet from OCI.
+  Without that password, Thin mode connects without a client certificate,
+  the listener sees a non-mTLS attempt, and rejects with `ORA-12506`.
+- **Fix**: pass `walletLocation` (the wallet directory) AND `walletPassword`
+  (the wallet zip password) explicitly to `oracledb.createPool` /
+  `oracledb.getConnection`:
+  ```ts
+  await oracledb.createPool({
+    user, password, connectString,
+    configDir: walletDir,
+    walletLocation: walletDir,
+    walletPassword: process.env.ORACLE_WALLET_PASSWORD, // required
+  });
+  ```
+- **Alternative**: switch to Thick mode (`oracledb.initOracleClient()`),
+  which does honor `cwallet.sso`. Costs an Instant Client install on every
+  developer machine + container image.
+- **Distraction to avoid**: the same `ORA-12506` is also produced by
+  database service ACL filtering on the IP. If JDBC clients connect fine
+  from the same machine, the network is OK — chase the wallet config.
+
+---
+
 ## Next.js (App Router)
 
 ### `'use client'` is not enough when an imported module touches `window` at top level

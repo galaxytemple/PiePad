@@ -37,13 +37,16 @@ function resolveWalletDir(): string {
 export async function getPool(): Promise<Pool> {
   if (pool) return pool;
   const walletDir = resolveWalletDir();
+  // ADB wallet zip ships cwallet.sso (autologin) for JDBC, but node-oracledb
+  // Thin mode opens the encrypted ewallet.p12 instead and therefore requires
+  // the wallet password set during ADB wallet download. See lessons.md.
   pool = await oracledb.createPool({
     user: requireEnv("ORACLE_USER"),
     password: requireEnv("ORACLE_PASSWORD"),
     connectString: requireEnv("ORACLE_TNS_NAME"),
     configDir: walletDir,
     walletLocation: walletDir,
-    walletPassword: "",
+    walletPassword: requireEnv("ORACLE_WALLET_PASSWORD"),
     poolMin: 1,
     poolMax: 8,
     poolIncrement: 1,
