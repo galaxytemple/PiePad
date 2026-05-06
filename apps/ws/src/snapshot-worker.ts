@@ -12,6 +12,9 @@ const INTERVAL_MS = Number(process.env.SNAPSHOT_INTERVAL_MS ?? 30_000);
 
 let timer: NodeJS.Timeout | null = null;
 
+// Y.encodeStateAsUpdate of an empty Y.Doc returns a 2-byte sentinel.
+const EMPTY_STATE_BYTES = 2;
+
 async function flushDirty(): Promise<void> {
   const dirty = Array.from(getDirtyRooms());
   for (const roomId of dirty) {
@@ -23,6 +26,11 @@ async function flushDirty(): Promise<void> {
     }
     try {
       const state = Y.encodeStateAsUpdate(doc);
+      // Refuse to overwrite a good snapshot with an empty one.
+      if (state.byteLength <= EMPTY_STATE_BYTES) {
+        clearDirty(roomId);
+        continue;
+      }
       await saveSnapshot(roomId, state);
       clearDirty(roomId);
     } catch (err) {

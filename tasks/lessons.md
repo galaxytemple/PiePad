@@ -72,6 +72,41 @@ start of related work to avoid repeating the same mistakes.
 
 ---
 
+## y-websocket persistence
+
+### `bindState` is not awaited — capture live updates before applying persisted state
+- **Symptom**: After a server restart, content typed before the crash
+  appears to "vanish" on the next `writeState` (e.g. an empty Oracle
+  snapshot replaces a good one), even though clients clearly had the data.
+- **Cause**: y-websocket inserts the freshly created `Y.Doc` into its
+  internal `docs` Map and starts the WS sync handshake **before** the
+  Promise from `persistence.bindState` resolves. A reconnecting client can
+  therefore push its updates into `ydoc` during the `await
+  ldb.getYDoc(...)` window. If your `update` listener is attached only
+  after the persisted state is loaded, those client updates land in memory
+  but never hit LevelDB. A short connect/disconnect later, `writeState`
+  encodes the still-empty (from the server's perspective) doc and writes it
+  to Oracle, clobbering the previous good snapshot.
+- **Fix**: inside `bindState`, after the async load completes, encode the
+  current live `ydoc` and persist it explicitly before applying the
+  persisted state and attaching the listener:
+  ```ts
+  const liveUpdates = Y.encodeStateAsUpdate(ydoc);
+  if (liveUpdates.byteLength > 2) {
+    await ldb.storeUpdate(roomId, liveUpdates);
+  }
+  ```
+
+### Treat empty doc as "do not snapshot"
+- **Symptom**: Same as above — the empty-doc snapshot wins and good data is
+  lost after a brief connect/disconnect race.
+- **Fix**: in both `writeState` and the periodic snapshot worker, skip the
+  upsert when `Y.encodeStateAsUpdate(ydoc).byteLength <= 2` (the empty
+  sentinel). Snapshots are inherently last-write-wins, so refusing to
+  write empty preserves the most recent meaningful state.
+
+---
+
 ## Node.js / ESM-CJS interop
 
 ### Dual-package libraries can silently load twice

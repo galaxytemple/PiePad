@@ -50,21 +50,37 @@ async function hydrateFromOracle(
   }
 }
 
+// Y.encodeStateAsUpdate of an empty Y.Doc returns a 2-byte sentinel; anything
+// larger means the doc actually has content.
+const EMPTY_STATE_BYTES = 2;
+
 export const persistence: Persistence = {
   provider: ldb,
   async bindState(roomId, ydoc) {
     const persisted = await ldb.getYDoc(roomId);
-    let state = Y.encodeStateAsUpdate(persisted);
+    let persistedState = Y.encodeStateAsUpdate(persisted);
 
-    // Empty Y.Doc encodes to a ~2-byte sentinel — fall back to Oracle.
-    if (state.byteLength <= 2) {
+    if (persistedState.byteLength <= EMPTY_STATE_BYTES) {
       const recovered = await hydrateFromOracle(roomId, persisted);
       if (recovered) {
-        state = Y.encodeStateAsUpdate(persisted);
+        persistedState = Y.encodeStateAsUpdate(persisted);
       }
     }
 
-    Y.applyUpdate(ydoc, state);
+    // y-websocket registers the Y.Doc in its `docs` Map *before* awaiting
+    // bindState, so a reconnecting client can already sync updates into
+    // `ydoc` while we are still loading from LevelDB/Oracle above. Capture
+    // them now and persist explicitly — without this, those updates land
+    // only in memory and are lost on the next server restart, and a
+    // subsequent writeState may even overwrite a good snapshot with the
+    // pre-sync empty state.
+    const liveUpdates = Y.encodeStateAsUpdate(ydoc);
+    if (liveUpdates.byteLength > EMPTY_STATE_BYTES) {
+      await ldb.storeUpdate(roomId, liveUpdates);
+      dirtyRooms.add(roomId);
+    }
+
+    Y.applyUpdate(ydoc, persistedState);
 
     ydoc.on("update", (update: Uint8Array) => {
       ldb.storeUpdate(roomId, update).catch((err) => {
@@ -76,7 +92,6 @@ export const persistence: Persistence = {
       dirtyRooms.add(roomId);
     });
 
-    // Oracle metadata side-effects (fire-and-forget; do not block sync).
     void ensureRoom(roomId)
       .then(() => touchRoomAccess(roomId))
       .catch((err) => {
@@ -90,6 +105,12 @@ export const persistence: Persistence = {
   async writeState(roomId, ydoc) {
     try {
       const state = Y.encodeStateAsUpdate(ydoc);
+      // Brief connect/disconnect before sync completes leaves an empty doc
+      // here — refuse to clobber an existing good Oracle snapshot.
+      if (state.byteLength <= EMPTY_STATE_BYTES) {
+        dirtyRooms.delete(roomId);
+        return;
+      }
       await saveSnapshot(roomId, state);
       dirtyRooms.delete(roomId);
     } catch (err) {
