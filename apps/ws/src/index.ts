@@ -4,6 +4,7 @@ import { closePool } from "@piepad/db";
 import http from "node:http";
 import { WebSocketServer } from "ws";
 import { setPersistence, setupWSConnection } from "y-websocket/bin/utils";
+import { evictRoom } from "./evict.js";
 import { closeLeveldb, persistence } from "./persistence.js";
 import {
   startSnapshotWorker,
@@ -15,11 +16,58 @@ startSnapshotWorker();
 
 const PORT = Number(process.env.WS_PORT ?? 1234);
 const HOST = process.env.WS_HOST ?? "0.0.0.0";
+const INTERNAL_SECRET = process.env.AUTH_SECRET ?? "";
 
-const server = http.createServer((req, res) => {
+async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.on("data", (chunk) => (raw += chunk));
+    req.on("end", () => {
+      try {
+        resolve(raw.length > 0 ? JSON.parse(raw) : {});
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+const server = http.createServer(async (req, res) => {
   if (req.url === "/health") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+  if (req.method === "POST" && req.url === "/internal/evict") {
+    const provided = req.headers["x-internal-secret"];
+    if (
+      typeof provided !== "string" ||
+      INTERNAL_SECRET.length === 0 ||
+      provided !== INTERNAL_SECRET
+    ) {
+      res.writeHead(403);
+      res.end();
+      return;
+    }
+    try {
+      const body = (await readJsonBody(req)) as {
+        roomId?: string;
+        reason?: string;
+      };
+      if (!body.roomId) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: "missing_roomId" }));
+        return;
+      }
+      const evicted = evictRoom(body.roomId, body.reason ?? "deleted");
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, evicted }));
+    } catch (err) {
+      console.error("[/internal/evict] failed", err);
+      res.writeHead(500);
+      res.end();
+    }
     return;
   }
   res.writeHead(404);

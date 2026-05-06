@@ -22,7 +22,13 @@ declare module "y-websocket/bin/utils" {
     provider?: unknown;
   }
 
-  export const docs: Map<string, Y.Doc>;
+  // y-websocket's actual class is WSSharedDoc extends Y.Doc with `conns`,
+  // a per-doc map of connections we need for eviction.
+  export interface WSSharedDoc extends Y.Doc {
+    conns: Map<{ close?: () => void }, Set<number>>;
+  }
+
+  export const docs: Map<string, WSSharedDoc>;
 
   export function setPersistence(persistence: Persistence | null): void;
   export function getPersistence(): Persistence | null;

@@ -19,6 +19,7 @@ const PadEditorInner = dynamic(
 export interface PadEditorProps {
   roomId: string;
   roomName: string;
+  hasPassword: boolean;
   isOwner: boolean;
   user: { name: string; avatarUrl: string | null };
 }

@@ -248,6 +248,33 @@ export async function ensureRoom(
   });
 }
 
+export async function renameRoom(
+  roomId: string,
+  name: string
+): Promise<void> {
+  const trimmed = name.trim().slice(0, 200);
+  if (trimmed.length === 0) throw new Error("name_empty");
+  await withConnection(async (conn) => {
+    await conn.execute(
+      `UPDATE rooms SET name = :name WHERE id = :roomId`,
+      { roomId, name: trimmed },
+      { autoCommit: true }
+    );
+  });
+}
+
+export async function deleteRoom(roomId: string): Promise<void> {
+  // FK ON DELETE CASCADE on room_visits and room_snapshots cleans up
+  // dependent rows automatically.
+  await withConnection(async (conn) => {
+    await conn.execute(
+      `DELETE FROM rooms WHERE id = :roomId`,
+      { roomId },
+      { autoCommit: true }
+    );
+  });
+}
+
 export async function setRoomPasswordHash(
   roomId: string,
   hash: string | null

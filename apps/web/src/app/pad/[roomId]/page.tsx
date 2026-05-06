@@ -63,6 +63,7 @@ export default async function PadPage({ params, searchParams }: PageProps) {
     <PadEditor
       roomId={roomId}
       roomName={room.name}
+      hasPassword={room.hasPassword}
       isOwner={isOwner}
       user={{ name: displayName, avatarUrl }}
     />

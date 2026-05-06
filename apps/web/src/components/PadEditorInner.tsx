@@ -7,6 +7,7 @@ import { MonacoBinding } from "y-monaco";
 import { WebsocketProvider } from "y-websocket";
 import * as Y from "yjs";
 import { DEFAULT_LANGUAGE_ID, findLanguage, LANGUAGES } from "@/lib/languages";
+import { RoomSettings } from "@/components/RoomSettings";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:1234";
 
@@ -64,13 +65,20 @@ function colorFor(name: string): string {
 interface PadEditorInnerProps {
   roomId: string;
   roomName: string;
+  hasPassword: boolean;
   isOwner: boolean;
   user: { name: string; avatarUrl: string | null };
+}
+
+interface DeletedNotice {
+  reason?: string;
+  at?: number;
 }
 
 export function PadEditorInner({
   roomId,
   roomName,
+  hasPassword,
   isOwner,
   user: viewer,
 }: PadEditorInnerProps) {
@@ -80,6 +88,7 @@ export function PadEditorInner({
   const [argsText, setArgsText] = useState<string>("");
   const [running, setRunning] = useState<boolean>(false);
   const [output, setOutput] = useState<RunResult | RunError | null>(null);
+  const [deleted, setDeleted] = useState<DeletedNotice | null>(null);
 
   const localUser = useMemo<AwarenessUser>(
     () => ({
@@ -130,17 +139,21 @@ export function PadEditorInner({
       setUsers(list);
     };
 
-    const syncLanguageFromYjs = () => {
-      const next = meta.get("language");
-      if (typeof next === "string") setLanguageId(next);
+    const syncMetaFromYjs = () => {
+      const lang = meta.get("language");
+      if (typeof lang === "string") setLanguageId(lang);
+      const del = meta.get("deleted");
+      if (del && typeof del === "object") {
+        setDeleted(del as DeletedNotice);
+      }
     };
 
     provider.on("status", handleStatus);
     provider.awareness.on("change", refreshUsers);
-    meta.observe(syncLanguageFromYjs);
+    meta.observe(syncMetaFromYjs);
 
     refreshUsers();
-    syncLanguageFromYjs();
+    syncMetaFromYjs();
 
     ydocRef.current = ydoc;
     providerRef.current = provider;
@@ -148,7 +161,7 @@ export function PadEditorInner({
     return () => {
       bindingRef.current?.destroy();
       bindingRef.current = null;
-      meta.unobserve(syncLanguageFromYjs);
+      meta.unobserve(syncMetaFromYjs);
       provider.awareness.off("change", refreshUsers);
       provider.off("status", handleStatus);
       provider.destroy();
@@ -158,6 +171,33 @@ export function PadEditorInner({
       metaRef.current = null;
     };
   }, [roomId, localUser]);
+
+  // Belt-and-suspenders: also poll room status. The Yjs meta.deleted
+  // broadcast is the fast path, but a network blip during the broadcast
+  // (or a ws restart) could swallow it. Both paths converge on setDeleted.
+  useEffect(() => {
+    if (deleted) return;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const res = await fetch(`/api/rooms/${roomId}/status`, {
+          cache: "no-store",
+        });
+        if (cancelled) return;
+        if (res.status === 404) {
+          setDeleted({ reason: "not_found", at: Date.now() });
+          return;
+        }
+      } catch {
+        // network blip — try again on next tick
+      }
+    };
+    const id = setInterval(check, 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [roomId, deleted]);
 
   const handleEditorMount = (instance: editor.IStandaloneCodeEditor) => {
     const ydoc = ydocRef.current;
@@ -235,6 +275,13 @@ export function PadEditorInner({
               owner
             </span>
           ) : null}
+          {isOwner && !deleted ? (
+            <RoomSettings
+              roomId={roomId}
+              roomName={roomName}
+              hasPassword={hasPassword}
+            />
+          ) : null}
           <span className="font-mono text-xs text-zinc-400">{roomId}</span>
           <span
             className={`rounded px-2 py-0.5 text-xs ${STATUS_STYLES[status]}`}
@@ -282,6 +329,13 @@ export function PadEditorInner({
         </div>
       </header>
 
+      {deleted ? (
+        <div className="border-b border-amber-300 bg-amber-50 px-6 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          This pad was deleted by the owner. The content shown is read-only —
+          select and copy anything you want to keep before leaving.
+        </div>
+      ) : null}
+
       <div className="min-h-0 flex-1">
         <Editor
           height="100%"
@@ -292,6 +346,8 @@ export function PadEditorInner({
             fontSize: 14,
             minimap: { enabled: false },
             scrollBeyondLastLine: false,
+            readOnly: !!deleted,
+            domReadOnly: !!deleted,
           }}
         />
       </div>
