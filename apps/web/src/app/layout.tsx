@@ -31,7 +31,6 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        {/* GitHub-style top progress bar — pure CSS, no framer-motion */}
         <HolyLoader color="#3b82f6" height="2.5px" speed={250} showSpinner={false} />
         <Providers>{children}</Providers>
       </body>

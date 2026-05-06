@@ -1,4 +1,5 @@
 import { unlockRoomAction } from "@/app/actions/rooms";
+import Link from "next/link";
 
 interface Props {
   roomId: string;
@@ -35,12 +36,12 @@ export function PasswordPrompt({ roomId, roomName, showError }: Props) {
             </p>
           ) : null}
           <div className="flex items-center justify-between">
-            <a
+            <Link
               href="/"
               className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
             >
               ← Home
-            </a>
+            </Link>
             <button
               type="submit"
               className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"

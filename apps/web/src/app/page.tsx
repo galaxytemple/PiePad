@@ -8,6 +8,7 @@ import {
   listRoomsVisitedByUser,
 } from "@piepad/db";
 import { Avatar, Button, Card } from "@heroui/react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 interface RoomItem {
@@ -51,23 +52,23 @@ export default async function HomePage() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="flex items-center justify-between border-b border-divider bg-content1 px-6 py-3">
-        <a href="/" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.svg" alt="" className="h-8 w-8" />
           <span className="text-xl font-bold tracking-tight">PiePad</span>
-        </a>
+        </Link>
         <div className="flex items-center gap-3">
           <ThemeToggle />
           <CreatePadButton />
           {user.isAdmin ? (
-            <a
+            <Link
               href="/admin/users"
               className="text-sm text-default-500 hover:text-default-900"
             >
               Admin
-            </a>
+            </Link>
           ) : null}
-          <a
+          <Link
             href="/me"
             className="flex items-center gap-2 rounded-full border border-divider bg-content1 px-3 py-1 text-sm transition-colors hover:bg-content2"
           >
@@ -83,7 +84,7 @@ export default async function HomePage() {
                 admin
               </span>
             ) : null}
-          </a>
+          </Link>
           <form
             action={async () => {
               "use server";
@@ -137,7 +138,7 @@ function RoomColumn({
           <ul className="divide-y divide-divider">
             {rooms.map((r) => (
               <li key={r.id}>
-                <a
+                <Link
                   href={`/pad/${r.id}`}
                   className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-content2"
                 >
@@ -154,7 +155,7 @@ function RoomColumn({
                   <span className="ml-3 shrink-0 text-xs text-default-500">
                     {r.relativeLabel} {r.relativeTime}
                   </span>
-                </a>
+                </Link>
               </li>
             ))}
           </ul>

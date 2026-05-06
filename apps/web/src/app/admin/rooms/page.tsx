@@ -1,6 +1,7 @@
 import { adminDeleteRoomAction } from "@/app/actions/rooms";
 import { timeAgo } from "@/lib/relative-time";
 import { listAllRooms } from "@piepad/db";
+import Link from "next/link";
 
 export default async function AdminRoomsPage() {
   const rooms = await listAllRooms(200);
@@ -29,12 +30,12 @@ export default async function AdminRoomsPage() {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     {r.hasPassword ? <span aria-hidden>🔒</span> : null}
-                    <a
+                    <Link
                       href={`/pad/${r.id}`}
                       className="font-medium hover:underline"
                     >
                       {r.name}
-                    </a>
+                    </Link>
                   </div>
                   <p className="font-mono text-xs text-zinc-400">{r.id}</p>
                 </td>

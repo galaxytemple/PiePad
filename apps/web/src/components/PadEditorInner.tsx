@@ -2,6 +2,7 @@
 
 import { Editor } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
+import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MonacoBinding } from "y-monaco";
@@ -318,13 +319,13 @@ export function PadEditorInner({
     <div className="flex h-screen flex-col">
       <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-6 py-3 dark:border-zinc-800 dark:bg-zinc-900">
         <div className="flex items-center gap-3">
-          <a
+          <Link
             href="/"
             className="text-sm text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
             aria-label="Home"
           >
             ←
-          </a>
+          </Link>
           <span className="flex items-center gap-1 text-sm font-medium">
             {hasPassword ? (
               <span title="Private — password required" aria-label="locked">
