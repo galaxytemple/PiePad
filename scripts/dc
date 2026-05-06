@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Shorthand for the project's docker compose invocation.
+# Always loads the project-root .env and points at docker/docker-compose.yml,
+# so callers don't have to remember --env-file / -f flags every time.
+#
+# Usage examples:
+#   ./scripts/dc up -d                  # default profile (caddy/web/ws/cleanup)
+#   ./scripts/dc --profile runtime up -d piston
+#   ./scripts/dc --profile tools run --rm flyway info
+#   ./scripts/dc logs -f web
+#   ./scripts/dc build cleanup
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+exec docker compose --env-file .env -f docker/docker-compose.yml "$@"

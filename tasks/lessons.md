@@ -128,6 +128,34 @@ start of related work to avoid repeating the same mistakes.
 
 ---
 
+## Yjs collaborative editing
+
+### y-monaco emits decoration class names but ships no CSS for them
+- **Symptom**: Yjs sync clearly works (typing in tab A appears in tab B)
+  and awareness state is updated, but you never see a remote caret or
+  selection highlight in the editor.
+- **Cause**: `y-monaco`'s `MonacoBinding` adds Monaco decorations with
+  the classes `yRemoteSelection`, `yRemoteSelectionHead`,
+  `.yRemoteSelection-<clientId>`, `.yRemoteSelectionHead-<clientId>`,
+  but the package doesn't bundle CSS for any of them. Without rules,
+  the elements collapse to zero pixels.
+- **Fix**: drop a base block in your global CSS for the un-suffixed
+  classes (caret bar, selection background) and inject per-clientID
+  rules dynamically from awareness so each remote user gets their own
+  colour + initial badge:
+  ```ts
+  const styleEl = document.createElement("style");
+  document.head.appendChild(styleEl);
+  awareness.on("change", () => {
+    styleEl.textContent = [...awareness.getStates()].map(([id, s]) => `
+      .yRemoteSelection-${id} { background: ${s.user.color}55 }
+      .yRemoteSelectionHead-${id}::after { content: '${initial(s.user.name)}'; background: ${s.user.color} }
+    `).join("");
+  });
+  ```
+
+---
+
 ## Node.js / ESM-CJS interop
 
 ### Dual-package libraries can silently load twice

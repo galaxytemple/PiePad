@@ -11,11 +11,12 @@
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
-    "db:migrate": "docker compose --env-file .env -f docker/docker-compose.yml --profile tools run --rm flyway migrate",
-    "db:info": "docker compose --env-file .env -f docker/docker-compose.yml --profile tools run --rm flyway info",
-    "db:validate": "docker compose --env-file .env -f docker/docker-compose.yml --profile tools run --rm flyway validate",
-    "piston:up": "docker compose --env-file .env -f docker/docker-compose.yml --profile runtime up -d piston",
-    "piston:down": "docker compose --env-file .env -f docker/docker-compose.yml --profile runtime down",
+    "dc": "./scripts/dc",
+    "db:migrate": "./scripts/dc --profile tools run --rm flyway migrate",
+    "db:info": "./scripts/dc --profile tools run --rm flyway info",
+    "db:validate": "./scripts/dc --profile tools run --rm flyway validate",
+    "piston:up": "./scripts/dc --profile runtime up -d piston",
+    "piston:down": "./scripts/dc --profile runtime down",
     "piston:install": "./scripts/install-piston-langs.sh",
     "piston:logs": "docker logs -f piepad-piston"
   }

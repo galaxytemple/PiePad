@@ -81,7 +81,7 @@ Real-time collaborative notepad with code execution, deployed on OCI Free Tier.
       so `apps/web` and `apps/ws` read from the same source of truth
 - [x] `NEXT_PUBLIC_WS_URL` plumbed through `.env.example`
 
-## Phase 4 — Auth & Rooms (Google OAuth-only)
+## Phase 4 — Auth & Rooms (Google OAuth-only) ✅
 
 ### 4.1 Schema (V3 migration)
 - [ ] DROP `site_passwords` (site-password gate replaced by mandatory sign-in)
@@ -188,30 +188,57 @@ Real-time collaborative notepad with code execution, deployed on OCI Free Tier.
 
 ## Phase 7 — Hardening (post-MVP)
 
+- [x] Per-user rate limit on `/api/run` (token bucket keyed on
+      session.user.id; in-memory, swap to Redis if we ever scale out)
+- [x] Vitest unit suite (apps/web 48 + apps/cleanup 7 = 55 cases)
+- [x] Playwright E2E smoke tests (auth-redirect, 6 cases) +
+      `pnpm e2e` / `pnpm e2e:ui` scripts; storageState path documented
+      in `apps/web/e2e/README.md` for adding authenticated flows later
 - [ ] Backup job: Oracle DB export → OCI Object Storage weekly
 - [ ] Observability: docker logs aggregation, simple uptime check
 - [ ] Brute-force protection on site/room passwords (attempt counter + lockout)
 - [ ] CSP / security headers via Caddy
+- [ ] Authenticated E2E (Playwright + storageState pattern)
 
 ---
 
 ## Open Questions Resolved
 
-- Piston: **self-hosted** in Docker Compose (CI/CD-managed)
+- Piston: **self-hosted** in Docker Compose (with public emkc.org API as
+  fallback via `PISTON_URL`)
 - Yjs persistence: **LevelDB + Oracle DB hybrid** (Option C)
-- Access: **site password + optional room password + admin-only room list**
-- Lifecycle: **30-day inactivity auto-delete**
-- Infra: **single user-provisioned OCI ARM instance, multi-container via Compose**
+- Access: **Google OAuth required everywhere** + optional room password +
+  admin via `ADMIN_EMAILS` env (no in-app site password)
+- Lifecycle: **30-day inactivity auto-delete** (apps/cleanup, node-cron)
+- Infra: **single user-provisioned OCI A1 instance**, multi-container Compose,
+  Caddy + sslip.io HTTPS, deploys via GitHub Actions over SSH
 
 ## Pending Confirmations
 
-- [ ] Oracle DB connection style (Wallet/mTLS) — assume Wallet for now
-- [ ] Domain name + DNS pointing to OCI public IP
-- [ ] GitHub repo creation (private?)
-- [ ] Admin bootstrap method (env-seeded first admin, then UI-managed)
+- [x] Oracle DB connection style — **mTLS wallet** (lessons.md captures
+      Thin-mode `walletLocation` + `walletPassword` requirement)
+- [ ] Domain name + DNS — using `<ip>.sslip.io` until a real domain is in
+- [x] GitHub repo creation — **private** repo `PiePad`
+- [x] Admin bootstrap method — `ADMIN_EMAILS` env (no DB column)
 
 ---
 
 ## Review Notes
 
-_Filled in after implementation phases complete._
+Phases 0–7 functionally complete. 62 commits, 61 test cases (55 Vitest +
+6 Playwright). Notable retrospective points captured in `tasks/lessons.md`:
+
+- **Biggest time-sink**: `<a href>` vs `<Link>` — bfcache silently killed
+  React event delegation after every back-nav. Took several rounds of
+  swapping HeroUI Buttons for plain `<button>` and disabling holy-loader
+  before realising it was the navigation primitive itself, not the button.
+- **HeroUI v3 API drift** from v2 / older docs (Card.Body → Card.Content,
+  Button.startContent gone, Modal compound shape, HeroUIProvider removed,
+  `bordered` → `outline`) consumed a chunk of the UI port; now type-checked
+  per page via direct .d.ts inspection rather than blog posts.
+- **Oracle quirks** (cwallet.sso vs Thin mode mTLS, MERGE bind reuse,
+  `FETCH FIRST :n` brittleness) are all parked in lessons.md so future
+  Oracle work in this repo doesn't relitigate them.
+
+Awaiting OCI A1 capacity for first real deploy; rest of stack tested
+locally.
