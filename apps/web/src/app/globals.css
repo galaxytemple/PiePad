@@ -42,11 +42,23 @@ body {
   box-sizing: border-box;
 }
 
+/* Initial badge floating above the caret. PadEditorInner overrides
+ * background + content per clientID using the user's awareness colour
+ * and initial. */
 .yRemoteSelectionHead::after {
   position: absolute;
   content: "";
-  border: 3px solid orange;
-  border-radius: 4px;
-  left: -4px;
-  top: -5px;
+  left: -1px;
+  top: -1.1em;
+  height: 1em;
+  line-height: 1;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: orange;
+  color: #fff;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
 }

@@ -52,6 +52,17 @@ function pickRandom<T>(items: readonly T[]): T {
   return items[idx] as T;
 }
 
+// Pick a printable single-letter initial from a display name. Whitespace,
+// punctuation, and emoji-only names fall back to "?". JSON.stringify in
+// the caller takes care of CSS escaping.
+function pickInitial(name: string | undefined | null): string {
+  if (!name) return "?";
+  for (const ch of name.trim()) {
+    if (/^[\p{L}\p{N}]$/u.test(ch)) return ch.toUpperCase();
+  }
+  return "?";
+}
+
 // Stable color per logged-in identity so my pill colour does not flicker
 // across reconnects within the same tab. Hash the name into the palette.
 function colorFor(name: string): string {
@@ -189,12 +200,16 @@ export function PadEditorInner({
       const blocks: string[] = [];
       for (const [clientId, state] of provider.awareness.getStates()) {
         if (clientId === localId) continue;
-        const u = (state as { user?: { color?: string } }).user;
+        const u = (state as { user?: { name?: string; color?: string } }).user;
         const color = typeof u?.color === "string" ? u.color : "#888";
+        const initial = pickInitial(u?.name);
         blocks.push(
           `.yRemoteSelection-${clientId} { background-color: ${color}55; }
            .yRemoteSelectionHead-${clientId} { border-left-color: ${color}; }
-           .yRemoteSelectionHead-${clientId}::after { border-color: ${color}; }`
+           .yRemoteSelectionHead-${clientId}::after {
+             background: ${color};
+             content: ${JSON.stringify(initial)};
+           }`
         );
       }
       styleEl.textContent = blocks.join("\n");
