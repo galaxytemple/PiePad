@@ -115,6 +115,12 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     if (!pistonRes.ok) {
       const text = await pistonRes.text();
+      console.error("[/api/run] Piston returned non-2xx", {
+        url: PISTON_URL,
+        status: pistonRes.status,
+        body: text,
+        sent: { language, version },
+      });
       return NextResponse.json(
         { error: "piston_error", status: pistonRes.status, body: text },
         { status: 502 }

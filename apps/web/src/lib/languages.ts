@@ -10,7 +10,7 @@ export interface LanguageDef {
 }
 
 export const LANGUAGES: readonly LanguageDef[] = [
-  { id: "javascript", label: "JavaScript", piston: { language: "node", version: "*" } },
+  { id: "javascript", label: "JavaScript", piston: { language: "javascript", version: "*" } },
   { id: "typescript", label: "TypeScript", piston: { language: "typescript", version: "*" } },
   { id: "python", label: "Python", piston: { language: "python", version: "*" } },
   { id: "java", label: "Java", piston: { language: "java", version: "*" } },
