@@ -62,7 +62,7 @@ export const LANGUAGES: readonly LanguageDef[] = [
   { id: "markdown", label: "Markdown" },
 ] as const;
 
-export const DEFAULT_LANGUAGE_ID = "javascript";
+export const DEFAULT_LANGUAGE_ID = "python";
 
 export function findLanguage(id: string): LanguageDef {
   return LANGUAGES.find((l) => l.id === id) ?? LANGUAGES[0]!;

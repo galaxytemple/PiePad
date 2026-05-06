@@ -8,6 +8,7 @@ import { WebsocketProvider } from "y-websocket";
 import * as Y from "yjs";
 import { DEFAULT_LANGUAGE_ID, findLanguage, LANGUAGES } from "@/lib/languages";
 import { RoomSettings } from "@/components/RoomSettings";
+import { Stopwatch } from "@/components/Stopwatch";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:1234";
 
@@ -308,6 +309,7 @@ export function PadEditorInner({
               </option>
             ))}
           </select>
+          <Stopwatch />
         </div>
         <div className="flex items-center gap-3">
           {users.map((u, i) => (
