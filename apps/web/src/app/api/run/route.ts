@@ -1,3 +1,4 @@
+import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -39,15 +40,15 @@ interface PistonResponse {
   compile?: PistonStream;
 }
 
-// Per-IP token bucket. In-memory only; will reset on dyno restart and isn't
-// shared across instances. Phase 7 swaps for Redis.
+// Per-user token bucket. In-memory only — resets on process restart and
+// isn't shared across replicas. Move to Redis if we ever scale out.
 const buckets = new Map<string, { count: number; resetAt: number }>();
 
-function rateLimit(ip: string): { allowed: boolean; retryAfterSec: number } {
+function rateLimit(key: string): { allowed: boolean; retryAfterSec: number } {
   const now = Date.now();
-  const bucket = buckets.get(ip);
+  const bucket = buckets.get(key);
   if (!bucket || bucket.resetAt < now) {
-    buckets.set(ip, { count: 1, resetAt: now + 60_000 });
+    buckets.set(key, { count: 1, resetAt: now + 60_000 });
     return { allowed: true, retryAfterSec: 0 };
   }
   if (bucket.count >= RATE_LIMIT_PER_MINUTE) {
@@ -60,15 +61,13 @@ function rateLimit(ip: string): { allowed: boolean; retryAfterSec: number } {
   return { allowed: true, retryAfterSec: 0 };
 }
 
-function getClientIp(req: Request): string {
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
-}
-
 export async function POST(req: Request): Promise<NextResponse> {
-  const ip = getClientIp(req);
-  const limit = rateLimit(ip);
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  const userId = session.user.id;
+  const limit = rateLimit(`user:${userId}`);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "rate_limited", retryAfterSec: limit.retryAfterSec },
