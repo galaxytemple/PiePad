@@ -1,15 +1,82 @@
 # PiePad — Docker Compose
 #
 # Profiles:
-#   tools    — one-shot Flyway migrate/info/validate
-#   runtime  — long-running services used during dev (currently: piston)
-#   (default) — production stack (TODO: caddy / web / ws / cleanup)
+#   (default) — production stack: caddy + web + ws + cleanup
+#   runtime   — optional self-hosted Piston (skip if PISTON_URL points at
+#               the public API, e.g. https://emkc.org/api/v2/piston)
+#   tools     — one-shot Flyway migrate/info/validate
 #
 # Run from repo root via package.json scripts (pnpm db:migrate, pnpm piston:up).
 # Scripts pass --env-file .env so ${...} interpolation below resolves from the
 # project-root .env, not docker/.env (compose default).
 
 services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      PUBLIC_HOST: "${PUBLIC_HOST}"
+    depends_on:
+      - web
+      - ws
+
+  web:
+    build:
+      context: ../
+      dockerfile: ./docker/web.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      # Container-internal addressing overrides whatever's in .env (which is
+      # tuned for host dev). Wallet is mounted in-place so resolveWalletDir
+      # picks /wallet directly.
+      ORACLE_WALLET_DIR: /wallet
+      WS_INTERNAL_URL: http://ws:1234
+      # Default to in-compose Piston; override in .env to use the public API.
+      PISTON_URL: "${PISTON_URL:-http://piston:2000/api/v2}"
+    volumes:
+      - ../wallet:/wallet:ro
+    depends_on:
+      - ws
+
+  ws:
+    build:
+      context: ../
+      dockerfile: ./docker/ws.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      ORACLE_WALLET_DIR: /wallet
+      LEVELDB_PATH: /data/yjs
+    volumes:
+      - ../wallet:/wallet:ro
+      - ws_data:/data/yjs
+
+  cleanup:
+    build:
+      context: ../
+      dockerfile: ./docker/cleanup.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      ORACLE_WALLET_DIR: /wallet
+      WS_INTERNAL_URL: http://ws:1234
+    volumes:
+      - ../wallet:/wallet:ro
+    depends_on:
+      - ws
+
   flyway:
     image: flyway/flyway:10-alpine
     profiles: ["tools"]
@@ -56,4 +123,7 @@ services:
       - /piston/jobs:exec,uid=1000,gid=1000,mode=711
 
 volumes:
+  caddy_data:
+  caddy_config:
+  ws_data:
   piston_packages:

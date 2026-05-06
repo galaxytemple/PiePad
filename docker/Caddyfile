@@ -1,0 +1,16 @@
+# PUBLIC_HOST is e.g. 132-226-10-20.sslip.io — Caddy substitutes the env var
+# at startup. See https://caddyserver.com/docs/caddyfile/concepts#environment-variables
+{$PUBLIC_HOST} {
+    encode gzip zstd
+
+    # y-websocket: client connects to wss://host/yjs/<roomId> — strip /yjs
+    # so setupWSConnection sees /<roomId> and matches its docs map by room.
+    handle_path /yjs/* {
+        reverse_proxy ws:1234
+    }
+
+    # Everything else is the Next.js app (HTML + /api/* + static).
+    handle {
+        reverse_proxy web:3000
+    }
+}
