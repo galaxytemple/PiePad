@@ -269,7 +269,14 @@ export function PadEditorInner({
           >
             ←
           </a>
-          <span className="text-sm font-medium">{roomName}</span>
+          <span className="flex items-center gap-1 text-sm font-medium">
+            {hasPassword ? (
+              <span title="Private — password required" aria-label="locked">
+                🔒
+              </span>
+            ) : null}
+            {roomName}
+          </span>
           {isOwner ? (
             <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700 dark:bg-blue-950 dark:text-blue-300">
               owner

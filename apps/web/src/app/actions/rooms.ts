@@ -93,6 +93,19 @@ export async function setRoomPasswordAction(
   revalidatePath("/");
 }
 
+export async function adminDeleteRoomAction(
+  formData: FormData
+): Promise<void> {
+  const session = await auth();
+  if (!session?.user?.isAdmin) throw new Error("forbidden");
+  const roomId = String(formData.get("roomId") ?? "");
+  if (!roomId) throw new Error("missing_roomId");
+  await evictRoomFromWs(roomId, "admin_deleted");
+  await deleteRoom(roomId);
+  revalidatePath("/admin/rooms");
+  revalidatePath("/");
+}
+
 export async function deleteRoomAction(formData: FormData): Promise<void> {
   const userId = await requireSession();
   const roomId = String(formData.get("roomId") ?? "");

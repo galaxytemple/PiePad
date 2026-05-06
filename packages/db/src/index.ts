@@ -174,6 +174,95 @@ export async function upsertOAuthUser(
   });
 }
 
+export interface AdminUserRow {
+  id: number;
+  email: string;
+  name: string | null;
+  nickname: string | null;
+  avatarUrl: string | null;
+  primaryProvider: string | null;
+  createdAt: Date;
+  lastLoginAt: Date | null;
+}
+
+export async function listAllUsers(limit = 100): Promise<AdminUserRow[]> {
+  const safeLimit = Math.max(1, Math.min(1000, Math.floor(limit)));
+  return withConnection(async (conn) => {
+    type Row = {
+      ID: number;
+      EMAIL: string;
+      NAME: string | null;
+      NICKNAME: string | null;
+      AVATAR_URL: string | null;
+      PRIMARY_PROVIDER: string | null;
+      CREATED_AT: Date;
+      LAST_LOGIN_AT: Date | null;
+    };
+    const result = await conn.execute<Row>(
+      `SELECT id, email, name, nickname, avatar_url, primary_provider,
+              created_at, last_login_at
+         FROM users
+        ORDER BY last_login_at DESC NULLS LAST, created_at DESC
+        FETCH FIRST ${safeLimit} ROWS ONLY`,
+      {},
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return (result.rows ?? []).map((row) => ({
+      id: row.ID,
+      email: row.EMAIL,
+      name: row.NAME,
+      nickname: row.NICKNAME,
+      avatarUrl: row.AVATAR_URL,
+      primaryProvider: row.PRIMARY_PROVIDER,
+      createdAt: row.CREATED_AT,
+      lastLoginAt: row.LAST_LOGIN_AT,
+    }));
+  });
+}
+
+export interface AdminRoomRow extends RoomRow {
+  creatorEmail: string | null;
+  creatorName: string | null;
+}
+
+export async function listAllRooms(limit = 100): Promise<AdminRoomRow[]> {
+  const safeLimit = Math.max(1, Math.min(1000, Math.floor(limit)));
+  return withConnection(async (conn) => {
+    type Row = {
+      ID: string;
+      NAME: string;
+      HAS_PASSWORD: number;
+      CREATED_BY_USER_ID: number | null;
+      CREATED_AT: Date;
+      LAST_ACCESSED_AT: Date;
+      CREATOR_EMAIL: string | null;
+      CREATOR_NAME: string | null;
+    };
+    const result = await conn.execute<Row>(
+      `SELECT r.id, r.name,
+              CASE WHEN r.password_hash IS NULL THEN 0 ELSE 1 END AS has_password,
+              r.created_by_user_id, r.created_at, r.last_accessed_at,
+              u.email AS creator_email, u.name AS creator_name
+         FROM rooms r
+         LEFT JOIN users u ON u.id = r.created_by_user_id
+        ORDER BY r.last_accessed_at DESC
+        FETCH FIRST ${safeLimit} ROWS ONLY`,
+      {},
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return (result.rows ?? []).map((row) => ({
+      id: row.ID,
+      name: row.NAME,
+      hasPassword: row.HAS_PASSWORD === 1,
+      createdByUserId: row.CREATED_BY_USER_ID,
+      createdAt: row.CREATED_AT,
+      lastAccessedAt: row.LAST_ACCESSED_AT,
+      creatorEmail: row.CREATOR_EMAIL,
+      creatorName: row.CREATOR_NAME,
+    }));
+  });
+}
+
 export interface UserProfile {
   id: number;
   email: string;
