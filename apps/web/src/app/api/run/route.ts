@@ -3,7 +3,10 @@ import { z } from "zod";
 
 export const runtime = "nodejs";
 
-const PISTON_URL = process.env.PISTON_URL ?? "http://localhost:2000";
+// Use 127.0.0.1 instead of localhost: Node 17+ resolves localhost to ::1
+// (IPv6) first and Docker Desktop's port forwarding only binds IPv4, so the
+// connection refuses. In compose, override with PISTON_URL=http://piston:2000.
+const PISTON_URL = process.env.PISTON_URL ?? "http://127.0.0.1:2000";
 const RATE_LIMIT_PER_MINUTE = Number(
   process.env.RUN_RATE_LIMIT_PER_MINUTE ?? 10
 );

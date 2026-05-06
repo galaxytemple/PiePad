@@ -175,6 +175,26 @@ start of related work to avoid repeating the same mistakes.
 
 ---
 
+## Node.js networking
+
+### `localhost` from Node fetch refuses to Docker-published ports
+- **Symptom**: `curl http://localhost:2000/whatever` works, but a Next.js
+  API route fetching the same URL returns 502 (`piston_unreachable` /
+  `ECONNREFUSED`) within ~25ms — far too fast for any real round trip.
+- **Cause**: Node 17+ resolves `localhost` to `::1` (IPv6) before
+  `127.0.0.1`. Docker Desktop's port-publishing only binds IPv4, so the
+  IPv6 connection is refused. Node sometimes falls back to v4, but in
+  practice (especially with undici/fetch) the refusal often surfaces
+  unchanged. curl tries both addresses transparently, hiding the problem.
+- **Fix**: hard-code `http://127.0.0.1:<port>` in any URL that targets a
+  Docker-published service from a Node process. Reserve `localhost` for
+  browser-side URLs.
+- **Container case**: when the same Node service runs inside the compose
+  network, point at the service name (`http://piston:2000`) instead. The
+  IPv6 quirk only matters on the host loopback.
+
+---
+
 ## Next.js (App Router)
 
 ### `'use client'` is not enough when an imported module touches `window` at top level
