@@ -287,6 +287,33 @@ start of related work to avoid repeating the same mistakes.
 - This also means DB-layer functions like `updateUserNickname(id, ...)` do
   not need to do their own auth — the boundary is the server action.
 
+### Plain `<a href>` for internal navigation kills React after back-nav
+- **Symptom**: After clicking a link to another route in the app and then
+  using the browser back button, every interactive element on the
+  restored page goes dead. Buttons show their CSS `:active` state when
+  pressed (so the click is reaching the DOM) but their React `onClick`
+  handlers never fire — even programmatic
+  `document.querySelector('button').click()` does nothing. A hard refresh
+  fixes everything until the next round-trip.
+- **Cause**: A `<a href="/somewhere">` in App Router is a *full browser
+  navigation*, not an SPA transition. The browser caches the page in its
+  back-forward cache (bfcache); on back, the DOM is restored but React's
+  event delegation root no longer matches the document — clicks bypass
+  React entirely.
+- **Fix**: use `<Link>` from `next/link` for every internal route. Stays
+  in client-side routing, no bfcache, React stays attached.
+- **What didn't help (red herrings)**: switching the buttons from
+  HeroUI/react-aria to plain `<button>`, disabling the holy-loader
+  progress bar, `export const dynamic = "force-dynamic"`, configuring
+  `experimental.staleTimes`. The interactive tree wasn't broken — the
+  navigation was.
+- **Detection trick**: programmatic `.click()` on the dead button. If
+  even that doesn't fire React's onClick, the entire React event system
+  has been disconnected from the document — strongly hints at a
+  navigation/cache layer issue, not anything in the component.
+
+---
+
 ### `'use client'` is not enough when an imported module touches `window` at top level
 - **Symptom**: `ReferenceError: window is not defined at module evaluation` for
   a component marked `'use client'`. Stack points at an `import` line of a
