@@ -1,32 +1,34 @@
 "use client";
 
+import { Button } from "@heroui/react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
-  // next-themes can't know the resolved theme until the client mounts;
-  // render a static placeholder during SSR so we don't mismatch.
+  // next-themes can't know the resolved theme until the client mounts. To
+  // avoid SSR/CSR icon mismatch we always render the moon glyph on first
+  // paint and let useEffect swap it once the real theme is known. Keeping
+  // a real icon (not a placeholder dot) means the button always looks
+  // right and is always hittable.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const isDark = theme === "dark";
+  const isDark = mounted && theme === "dark";
   const next = isDark ? "light" : "dark";
-  const label = mounted
-    ? isDark
-      ? "Switch to light mode"
-      : "Switch to dark mode"
-    : "Toggle theme";
+  const label = isDark ? "Switch to light mode" : "Switch to dark mode";
 
   return (
-    <button
-      type="button"
+    <Button
+      isIconOnly
+      variant="outline"
+      size="sm"
       aria-label={label}
-      title={label}
-      onClick={() => setTheme(next)}
-      className="grid h-8 w-8 place-items-center rounded-full border border-zinc-300 bg-white text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+      onPress={() => setTheme(next)}
     >
-      {mounted ? (isDark ? "☀️" : "🌙") : "·"}
-    </button>
+      <span aria-hidden suppressHydrationWarning>
+        {isDark ? "☀️" : "🌙"}
+      </span>
+    </Button>
   );
 }
