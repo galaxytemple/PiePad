@@ -7,7 +7,7 @@ const PISTON_URL = process.env.PISTON_URL ?? "http://localhost:2000";
 const RATE_LIMIT_PER_MINUTE = Number(
   process.env.RUN_RATE_LIMIT_PER_MINUTE ?? 10
 );
-const RUN_TIMEOUT_MS = Number(process.env.RUN_TIMEOUT_MS ?? 30_000);
+const RUN_TIMEOUT_MS = Number(process.env.RUN_TIMEOUT_MS ?? 10_000);
 const COMPILE_TIMEOUT_MS = Number(
   process.env.COMPILE_TIMEOUT_MS ?? RUN_TIMEOUT_MS
 );
