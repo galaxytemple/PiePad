@@ -177,6 +177,22 @@ start of related work to avoid repeating the same mistakes.
 
 ## Piston
 
+### `/piston/jobs` must be tmpfs, not a regular volume
+- **Symptom**: every execute request returns 500 with body
+  `Cannot run proxy, clone failed: Invalid argument` — Piston starts and
+  serves /api/v2/runtimes fine, but no job ever runs.
+- **Cause**: nsjail clones a new mount namespace and bind-mounts the job's
+  scratch directory. It expects the filesystem under /piston/jobs to be
+  exec-able and to support the mount flags it needs (uid, gid, mode). A
+  Docker named volume is backed by overlayfs whose flags nsjail can't
+  fully replicate, so the clone() syscall fails with EINVAL.
+- **Fix**: mount `/piston/jobs` as tmpfs with the upstream-recommended
+  options:
+  ```yaml
+  tmpfs:
+    - /piston/jobs:exec,uid=1000,gid=1000,mode=711
+  ```
+
 ### Per-job timeouts the API enforces are *ceilings*, not defaults
 - **Symptom**: `/api/run` returns 502 `piston_error` with body
   `{"message":"run_timeout cannot exceed the configured limit of 3000"}`

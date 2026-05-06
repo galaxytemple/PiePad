@@ -41,8 +41,12 @@ services:
       PISTON_COMPILE_TIMEOUT: "30000"
     volumes:
       - piston_packages:/piston/packages
-      - piston_jobs:/piston/jobs
+    # nsjail bind-mounts /piston/jobs and needs an `exec`-capable filesystem
+    # whose mount flags it can clone. A regular Docker volume causes
+    # 'clone failed: Invalid argument'; tmpfs with these flags is the
+    # configuration the upstream piston compose ships with.
+    tmpfs:
+      - /piston/jobs:exec,uid=1000,gid=1000,mode=711
 
 volumes:
   piston_packages:
-  piston_jobs:
