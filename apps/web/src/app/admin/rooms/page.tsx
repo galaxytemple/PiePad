@@ -1,6 +1,7 @@
 import { adminDeleteRoomAction } from "@/app/actions/rooms";
 import { timeAgo } from "@/lib/relative-time";
 import { listAllRooms } from "@piepad/db";
+import { Button, Card } from "@heroui/react";
 import Link from "next/link";
 
 export default async function AdminRoomsPage() {
@@ -13,9 +14,9 @@ export default async function AdminRoomsPage() {
         <span className="text-sm text-zinc-500">{rooms.length} total</span>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+      <Card className="p-0">
         <table className="w-full text-sm">
-          <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-950">
+          <thead className="bg-content2 text-left text-xs uppercase tracking-wide text-default-500">
             <tr>
               <th className="px-4 py-3">Room</th>
               <th className="px-4 py-3">Owner</th>
@@ -24,7 +25,7 @@ export default async function AdminRoomsPage() {
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+          <tbody className="divide-y divide-divider">
             {rooms.map((r) => (
               <tr key={r.id}>
                 <td className="px-4 py-3">
@@ -37,43 +38,40 @@ export default async function AdminRoomsPage() {
                       {r.name}
                     </Link>
                   </div>
-                  <p className="font-mono text-xs text-zinc-400">{r.id}</p>
+                  <p className="font-mono text-xs text-default-400">{r.id}</p>
                 </td>
-                <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
+                <td className="px-4 py-3 text-default-700">
                   {r.creatorName ?? r.creatorEmail ?? "(unknown)"}
                   {r.creatorEmail ? (
-                    <p className="text-xs text-zinc-500">{r.creatorEmail}</p>
+                    <p className="text-xs text-default-500">{r.creatorEmail}</p>
                   ) : null}
                 </td>
-                <td className="px-4 py-3 text-zinc-500">
+                <td className="px-4 py-3 text-default-500">
                   {timeAgo(r.createdAt)}
                 </td>
-                <td className="px-4 py-3 text-zinc-500">
+                <td className="px-4 py-3 text-default-500">
                   {timeAgo(r.lastAccessedAt)}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <form action={adminDeleteRoomAction} className="inline">
                     <input type="hidden" name="roomId" value={r.id} />
-                    <button
-                      type="submit"
-                      className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
-                    >
+                    <Button type="submit" size="sm" variant="danger-soft">
                       Delete
-                    </button>
+                    </Button>
                   </form>
                 </td>
               </tr>
             ))}
             {rooms.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-zinc-500">
+                <td colSpan={5} className="px-4 py-12 text-center text-default-500">
                   No rooms yet.
                 </td>
               </tr>
             ) : null}
           </tbody>
         </table>
-      </div>
+      </Card>
     </div>
   );
 }
