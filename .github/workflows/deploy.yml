@@ -45,11 +45,20 @@ jobs:
           echo "Key last line:  $(tail -1 ~/.ssh/deploy)"
           echo "Key line count: $(wc -l < ~/.ssh/deploy)"
 
+          # Direct TCP probe first — distinguishes network/firewall block
+          # from an actual ssh-keyscan failure mode.
+          echo "TCP 22 reachability:"
+          if command -v nc >/dev/null 2>&1; then
+            nc -vz -w 10 "$DEPLOY_HOST" 22 2>&1 | sed 's/^/  /' || true
+          fi
+          echo "Runner public IP: $(curl -fsS https://api.ipify.org || echo unknown)"
+
           # ssh-keyscan times out at 5s by default; bump it and don't let
           # `-H` errors silently mask connectivity failures.
           if ! ssh-keyscan -T 15 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2> /tmp/keyscan.err; then
             echo "::error::ssh-keyscan failed against $DEPLOY_HOST"
-            cat /tmp/keyscan.err
+            echo "stderr:"
+            sed 's/^/  /' /tmp/keyscan.err
             exit 1
           fi
           if [ ! -s ~/.ssh/known_hosts ]; then
