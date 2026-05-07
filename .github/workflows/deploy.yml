@@ -91,6 +91,12 @@ jobs:
           AUTH_SECRET=${{ secrets.AUTH_SECRET }}
           AUTH_GOOGLE_ID=${{ secrets.AUTH_GOOGLE_ID }}
           AUTH_GOOGLE_SECRET=${{ secrets.AUTH_GOOGLE_SECRET }}
+          # Caddy terminates TLS and reverse-proxies to web:3000, so the
+          # request's Host header is the internal service name. Auth.js v5
+          # otherwise refuses to operate (UntrustedHost) and every auth()
+          # call throws — which on /login produces a bare 302 → / and
+          # creates a redirect loop with the proxy.ts middleware.
+          AUTH_TRUST_HOST=true
           ADMIN_EMAILS=${{ secrets.ADMIN_EMAILS }}
 
           NEXT_PUBLIC_WS_URL=wss://${{ secrets.PUBLIC_HOST }}/yjs
