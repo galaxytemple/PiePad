@@ -85,6 +85,10 @@ jobs:
           ORACLE_USER=${{ secrets.ORACLE_USER }}
           ORACLE_PASSWORD=${{ secrets.ORACLE_PASSWORD }}
           ORACLE_TNS_NAME=${{ secrets.ORACLE_TNS_NAME }}
+          # Login user and table owner can differ — ORACLE_SCHEMA pins
+          # CURRENT_SCHEMA so unqualified table names resolve into the
+          # owner's schema. Leave the secret empty if both are the same.
+          ORACLE_SCHEMA=${{ secrets.ORACLE_SCHEMA }}
           ORACLE_WALLET_DIR=/wallet
           ORACLE_WALLET_PASSWORD=${{ secrets.ORACLE_WALLET_PASSWORD }}
 

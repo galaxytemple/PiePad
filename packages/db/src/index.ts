@@ -34,9 +34,27 @@ function resolveWalletDir(): string {
   );
 }
 
+// Oracle identifier — letters/digits/underscore only. Used to reject any
+// ORACLE_SCHEMA env value that could not be a real schema name and would
+// otherwise be interpolated raw into ALTER SESSION (no bind variables
+// allowed there).
+const SCHEMA_NAME_RE = /^[A-Za-z_][A-Za-z0-9_$#]*$/;
+
+function resolveSchema(): string | undefined {
+  const value = process.env.ORACLE_SCHEMA?.trim();
+  if (!value) return undefined;
+  if (!SCHEMA_NAME_RE.test(value)) {
+    throw new Error(
+      `ORACLE_SCHEMA contains invalid characters: ${JSON.stringify(value)}`
+    );
+  }
+  return value;
+}
+
 export async function getPool(): Promise<Pool> {
   if (pool) return pool;
   const walletDir = resolveWalletDir();
+  const schema = resolveSchema();
   // ADB wallet zip ships cwallet.sso (autologin) for JDBC, but node-oracledb
   // Thin mode opens the encrypted ewallet.p12 instead and therefore requires
   // the wallet password set during ADB wallet download. See lessons.md.
@@ -50,6 +68,17 @@ export async function getPool(): Promise<Pool> {
     poolMin: 1,
     poolMax: 8,
     poolIncrement: 1,
+    // Login user and table-owner schema can differ (e.g. APP_PROD_USER
+    // logs in but tables live in APP_PROD_SCHEMA). Set CURRENT_SCHEMA
+    // once per physical pool session so unqualified table names in app
+    // queries resolve into the owner's schema.
+    sessionCallback: schema
+      ? async (connection: Connection): Promise<void> => {
+          await connection.execute(
+            `ALTER SESSION SET CURRENT_SCHEMA = ${schema}`
+          );
+        }
+      : undefined,
   });
   return pool;
 }
