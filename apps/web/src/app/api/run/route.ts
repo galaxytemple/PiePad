@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { createRateLimiter } from "@/lib/rate-limit";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -72,24 +73,10 @@ function pickStringOrNull(value: unknown): string | null {
 
 // Per-user token bucket. In-memory only — resets on process restart and
 // isn't shared across replicas. Move to Redis if we ever scale out.
-const buckets = new Map<string, { count: number; resetAt: number }>();
-
-function rateLimit(key: string): { allowed: boolean; retryAfterSec: number } {
-  const now = Date.now();
-  const bucket = buckets.get(key);
-  if (!bucket || bucket.resetAt < now) {
-    buckets.set(key, { count: 1, resetAt: now + 60_000 });
-    return { allowed: true, retryAfterSec: 0 };
-  }
-  if (bucket.count >= RATE_LIMIT_PER_MINUTE) {
-    return {
-      allowed: false,
-      retryAfterSec: Math.ceil((bucket.resetAt - now) / 1000),
-    };
-  }
-  bucket.count += 1;
-  return { allowed: true, retryAfterSec: 0 };
-}
+const runLimiter = createRateLimiter({
+  limit: RATE_LIMIT_PER_MINUTE,
+  windowMs: 60_000,
+});
 
 export async function POST(req: Request): Promise<NextResponse> {
   const session = await auth();
@@ -97,7 +84,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const userId = session.user.id;
-  const limit = rateLimit(`user:${userId}`);
+  const limit = runLimiter.consume(`user:${userId}`);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "rate_limited", retryAfterSec: limit.retryAfterSec },
@@ -147,6 +134,9 @@ export async function POST(req: Request): Promise<NextResponse> {
     // us with both error shapes and timeout-cap rejections.
     const rawBody = await pistonRes.text();
 
+    // Never echo Piston's raw body to the client — it can leak internal URLs,
+    // stack traces, or version strings. Log server-side and return a generic
+    // shape with just the upstream status code.
     if (!pistonRes.ok) {
       console.error("[/api/run] Piston returned non-2xx", {
         url: PISTON_URL,
@@ -155,7 +145,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         sent: { language, version },
       });
       return NextResponse.json(
-        { error: "piston_error", status: pistonRes.status, body: rawBody },
+        { error: "piston_error", status: pistonRes.status },
         { status: 502 }
       );
     }
@@ -169,12 +159,13 @@ export async function POST(req: Request): Promise<NextResponse> {
         body: rawBody.slice(0, 500),
       });
       return NextResponse.json(
-        { error: "piston_invalid_response", body: rawBody.slice(0, 500) },
+        { error: "piston_invalid_response" },
         { status: 502 }
       );
     }
 
-    // Public API uses { message } for validation errors at HTTP 200.
+    // Public API uses { message } for validation errors at HTTP 200. The
+    // message itself comes from the public API and is generally safe to show.
     if (!result.run && result.message) {
       console.error("[/api/run] Piston rejected request", {
         url: PISTON_URL,
@@ -193,7 +184,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         body: rawBody.slice(0, 500),
       });
       return NextResponse.json(
-        { error: "piston_invalid_response", body: rawBody.slice(0, 500) },
+        { error: "piston_invalid_response" },
         { status: 502 }
       );
     }
@@ -216,10 +207,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       error: err,
     });
     return NextResponse.json(
-      {
-        error: "piston_unreachable",
-        message: err instanceof Error ? err.message : String(err),
-      },
+      { error: "piston_unreachable" },
       { status: 502 }
     );
   } finally {

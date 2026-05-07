@@ -10,6 +10,7 @@ const { mocks } = vi.hoisted(() => ({
     setRoomPasswordHash: vi.fn(),
     renameRoom: vi.fn(),
     deleteRoom: vi.fn(),
+    deleteRoomWithAudit: vi.fn(),
     evictRoomFromWs: vi.fn(),
     setRoomUnlockCookie: vi.fn(),
     clearRoomUnlockCookie: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock("@piepad/db", () => ({
   setRoomPasswordHash: mocks.setRoomPasswordHash,
   renameRoom: mocks.renameRoom,
   deleteRoom: mocks.deleteRoom,
+  deleteRoomWithAudit: mocks.deleteRoomWithAudit,
 }));
 vi.mock("@/lib/ws-internal", () => ({
   evictRoomFromWs: mocks.evictRoomFromWs,
@@ -222,9 +224,21 @@ describe("adminDeleteRoomAction", () => {
 
   test("admin can delete a room they don't own", async () => {
     mocks.auth.mockResolvedValue({ user: SESSION_ADMIN });
+    mocks.getRoomById.mockResolvedValue({
+      id: "abc",
+      name: "Some Room",
+      hasPassword: false,
+      createdByUserId: 999,
+      createdAt: new Date(),
+      lastAccessedAt: new Date(),
+    });
     await adminDeleteRoomAction(form({ roomId: "abc" }));
     expect(mocks.evictRoomFromWs).toHaveBeenCalledWith("abc", "admin_deleted");
-    expect(mocks.deleteRoom).toHaveBeenCalledWith("abc");
+    expect(mocks.deleteRoomWithAudit).toHaveBeenCalledWith(
+      "abc",
+      "Some Room",
+      "ADMIN_DELETE"
+    );
   });
 });
 

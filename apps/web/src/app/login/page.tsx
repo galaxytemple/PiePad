@@ -5,8 +5,20 @@ interface PageProps {
   searchParams: Promise<{ callbackUrl?: string; error?: string }>;
 }
 
+// Reject anything that isn't a same-origin path: protocol-relative URLs
+// (`//evil.com`), absolute URLs, and backslash-prefixed paths (some browsers
+// normalize `\evil.com` to `//evil.com`) all become external redirects.
+function safeCallbackUrl(input: string | undefined): string {
+  if (!input) return "/";
+  if (input.length > 512) return "/";
+  if (!input.startsWith("/")) return "/";
+  if (input.startsWith("//") || input.startsWith("/\\")) return "/";
+  return input;
+}
+
 export default async function LoginPage({ searchParams }: PageProps) {
-  const { callbackUrl, error } = await searchParams;
+  const { callbackUrl: rawCallbackUrl, error } = await searchParams;
+  const callbackUrl = safeCallbackUrl(rawCallbackUrl);
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-6 p-8">
@@ -30,7 +42,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
           <form
             action={async () => {
               "use server";
-              await signIn("google", { redirectTo: callbackUrl ?? "/" });
+              await signIn("google", { redirectTo: callbackUrl });
             }}
           >
             <Button type="submit" variant="outline" fullWidth>

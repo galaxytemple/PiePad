@@ -2,6 +2,7 @@
 
 import { auth } from "@/auth";
 import { hashPassword, verifyPassword } from "@/lib/passwords";
+import { createRateLimiter } from "@/lib/rate-limit";
 import {
   clearRoomUnlockCookie,
   setRoomUnlockCookie,
@@ -9,6 +10,7 @@ import {
 import { evictRoomFromWs } from "@/lib/ws-internal";
 import {
   deleteRoom,
+  deleteRoomWithAudit,
   ensureRoom,
   getRoomById,
   getRoomPasswordHash,
@@ -19,6 +21,12 @@ import {
 import { nanoid } from "nanoid";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+
+const ROOM_NAME_MAX = 200;
+
+// 5 attempts per minute per (userId, roomId) — bcrypt cost 12 throttles a
+// single attempt to ~300 ms but that's nowhere near enough on its own.
+const unlockLimiter = createRateLimiter({ limit: 5, windowMs: 60_000 });
 
 async function requireSession(): Promise<number> {
   const session = await auth();
@@ -50,7 +58,8 @@ export async function createRoomAction(
   const password = String(formData.get("password") ?? "");
 
   const roomId = nanoid(12);
-  const name = rawName.length > 0 ? rawName.slice(0, 200) : roomId;
+  const name =
+    rawName.length > 0 ? rawName.slice(0, ROOM_NAME_MAX) : roomId;
 
   await ensureRoom(roomId, name, userId);
   if (password.length > 0) {
@@ -65,8 +74,11 @@ export async function createRoomAction(
 export async function renameRoomAction(formData: FormData): Promise<void> {
   const userId = await requireSession();
   const roomId = String(formData.get("roomId") ?? "");
-  const name = String(formData.get("name") ?? "");
+  const rawName = String(formData.get("name") ?? "");
   if (!roomId) throw new Error("missing_roomId");
+  // Cap before the DB round-trip — renameRoom's own trim/slice is a defence
+  // in depth but allocating an arbitrarily large string into Oracle is wasteful.
+  const name = rawName.slice(0, ROOM_NAME_MAX);
   await requireOwner(roomId, userId);
   await renameRoom(roomId, name);
   revalidatePath(`/pad/${roomId}`);
@@ -100,8 +112,10 @@ export async function adminDeleteRoomAction(
   if (!session?.user?.isAdmin) throw new Error("forbidden");
   const roomId = String(formData.get("roomId") ?? "");
   if (!roomId) throw new Error("missing_roomId");
+  // Capture the name for the audit row before the row disappears.
+  const room = await getRoomById(roomId);
   await evictRoomFromWs(roomId, "admin_deleted");
-  await deleteRoom(roomId);
+  await deleteRoomWithAudit(roomId, room?.name ?? roomId, "ADMIN_DELETE");
   revalidatePath("/admin/rooms");
   revalidatePath("/");
 }
@@ -130,6 +144,11 @@ export async function unlockRoomAction(formData: FormData): Promise<void> {
   const roomId = String(formData.get("roomId") ?? "");
   const password = String(formData.get("password") ?? "");
   if (!roomId) throw new Error("missing_roomId");
+
+  const limit = unlockLimiter.consume(`unlock:${userId}:${roomId}`);
+  if (!limit.allowed) {
+    redirect(`/pad/${roomId}?password_error=rate_limited`);
+  }
 
   const hash = await getRoomPasswordHash(roomId);
   if (!hash) {

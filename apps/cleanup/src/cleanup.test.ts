@@ -3,8 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 const { dbMocks } = vi.hoisted(() => ({
   dbMocks: {
     listExpiredRooms: vi.fn(),
-    deleteRoom: vi.fn(),
-    recordRoomDeletion: vi.fn(),
+    deleteRoomWithAudit: vi.fn(),
   },
 }));
 
@@ -25,8 +24,7 @@ function makeRoom(id: string, daysIdle = 31) {
 
 beforeEach(() => {
   dbMocks.listExpiredRooms.mockReset();
-  dbMocks.deleteRoom.mockReset();
-  dbMocks.recordRoomDeletion.mockReset();
+  dbMocks.deleteRoomWithAudit.mockReset();
   fetchMock.mockReset().mockResolvedValue(
     new Response("{}", { status: 200, headers: { "content-type": "application/json" } })
   );
@@ -41,7 +39,7 @@ describe("runCleanupOnce", () => {
     dbMocks.listExpiredRooms.mockResolvedValue([]);
     const result = await runCleanupOnce();
     expect(result).toEqual({ scanned: 0, deleted: 0, failed: 0 });
-    expect(dbMocks.deleteRoom).not.toHaveBeenCalled();
+    expect(dbMocks.deleteRoomWithAudit).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -49,7 +47,7 @@ describe("runCleanupOnce", () => {
     dbMocks.listExpiredRooms.mockResolvedValue([makeRoom("r1")]);
     await runCleanupOnce();
     const fetchOrder = fetchMock.mock.invocationCallOrder[0];
-    const deleteOrder = dbMocks.deleteRoom.mock.invocationCallOrder[0];
+    const deleteOrder = dbMocks.deleteRoomWithAudit.mock.invocationCallOrder[0];
     expect(fetchOrder).toBeLessThan(deleteOrder!);
   });
 
@@ -71,13 +69,13 @@ describe("runCleanupOnce", () => {
       makeRoom("r2"),
     ]);
     await runCleanupOnce();
-    expect(dbMocks.recordRoomDeletion).toHaveBeenCalledTimes(2);
-    expect(dbMocks.recordRoomDeletion).toHaveBeenCalledWith(
+    expect(dbMocks.deleteRoomWithAudit).toHaveBeenCalledTimes(2);
+    expect(dbMocks.deleteRoomWithAudit).toHaveBeenCalledWith(
       "r1",
       "Room r1",
       "30_DAY_INACTIVITY"
     );
-    expect(dbMocks.recordRoomDeletion).toHaveBeenCalledWith(
+    expect(dbMocks.deleteRoomWithAudit).toHaveBeenCalledWith(
       "r2",
       "Room r2",
       "30_DAY_INACTIVITY"
@@ -88,7 +86,11 @@ describe("runCleanupOnce", () => {
     dbMocks.listExpiredRooms.mockResolvedValue([makeRoom("r1")]);
     fetchMock.mockRejectedValue(new Error("ws is down"));
     const result = await runCleanupOnce();
-    expect(dbMocks.deleteRoom).toHaveBeenCalledWith("r1");
+    expect(dbMocks.deleteRoomWithAudit).toHaveBeenCalledWith(
+      "r1",
+      "Room r1",
+      "30_DAY_INACTIVITY"
+    );
     expect(result.deleted).toBe(1);
     expect(result.failed).toBe(0);
   });
@@ -99,13 +101,13 @@ describe("runCleanupOnce", () => {
       makeRoom("bad"),
       makeRoom("ok2"),
     ]);
-    dbMocks.deleteRoom.mockImplementation(async (id: string) => {
+    dbMocks.deleteRoomWithAudit.mockImplementation(async (id: string) => {
       if (id === "bad") throw new Error("FK violation or whatever");
     });
     const result = await runCleanupOnce();
     expect(result).toEqual({ scanned: 3, deleted: 2, failed: 1 });
     // ok2 still got processed even though `bad` failed
-    expect(dbMocks.recordRoomDeletion).toHaveBeenCalledWith(
+    expect(dbMocks.deleteRoomWithAudit).toHaveBeenCalledWith(
       "ok2",
       "Room ok2",
       "30_DAY_INACTIVITY"

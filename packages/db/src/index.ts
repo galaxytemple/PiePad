@@ -174,15 +174,22 @@ export async function upsertOAuthUser(
       nickname = null;
     }
 
+    // Reference src.* in both branches: oracledb Thin chokes on bind names
+    // reused between USING and INSERT/UPDATE clauses (same root cause as
+    // upsertRoomVisit's ORA-00923).
     await conn.execute(
       `MERGE INTO user_oauth_accounts a
-         USING (SELECT :provider AS p, :subject AS s FROM dual) src
+         USING (SELECT :provider AS p,
+                       :subject  AS s,
+                       :userId   AS uid,
+                       :email    AS em
+                  FROM dual) src
          ON (a.provider = src.p AND a.provider_subject = src.s)
        WHEN MATCHED THEN
-         UPDATE SET provider_email = :email, user_id = :userId
+         UPDATE SET provider_email = src.em, user_id = src.uid
        WHEN NOT MATCHED THEN
          INSERT (user_id, provider, provider_subject, provider_email)
-         VALUES (:userId, :provider, :subject, :email)`,
+         VALUES (src.uid, src.p, src.s, src.em)`,
       {
         userId,
         provider: input.provider,
@@ -349,11 +356,14 @@ export async function ensureRoom(
   await withConnection(async (conn) => {
     await conn.execute(
       `MERGE INTO rooms r
-         USING (SELECT :roomId AS id FROM dual) src
+         USING (SELECT :roomId AS id,
+                       :name   AS nm,
+                       :userId AS uid
+                  FROM dual) src
          ON (r.id = src.id)
        WHEN NOT MATCHED THEN
          INSERT (id, name, created_by_user_id)
-         VALUES (:roomId, :name, :userId)`,
+         VALUES (src.id, src.nm, src.uid)`,
       {
         roomId,
         name: name ?? roomId,
@@ -434,6 +444,28 @@ export async function deleteRoom(roomId: string): Promise<void> {
       { roomId },
       { autoCommit: true }
     );
+  });
+}
+
+// Audit + delete in a single transaction: either both land or neither does.
+// Standalone deleteRoom + recordRoomDeletion can race — if recordRoomDeletion
+// fails after deleteRoom commits, we silently lose the audit row.
+export async function deleteRoomWithAudit(
+  roomId: string,
+  roomName: string,
+  reason: "30_DAY_INACTIVITY" | "ADMIN_DELETE"
+): Promise<void> {
+  await withConnection(async (conn) => {
+    await conn.execute(
+      `INSERT INTO room_deletions (room_id, room_name, reason)
+       VALUES (:roomId, :roomName, :reason)`,
+      { roomId, roomName, reason }
+    );
+    await conn.execute(
+      `DELETE FROM rooms WHERE id = :roomId`,
+      { roomId }
+    );
+    await conn.commit();
   });
 }
 
@@ -653,20 +685,47 @@ export async function getLatestSnapshot(
   });
 }
 
+// Default cap mirrors a Yjs document with thousands of edits but no embedded
+// binary content. Override via env when use cases legitimately need more.
+const SNAPSHOT_MAX_BYTES = Math.max(
+  64 * 1024,
+  Number(process.env.SNAPSHOT_MAX_BYTES ?? 5 * 1024 * 1024)
+);
+
+export class SnapshotTooLargeError extends Error {
+  constructor(
+    public readonly roomId: string,
+    public readonly bytes: number,
+    public readonly max: number
+  ) {
+    super(
+      `snapshot for ${roomId} is ${bytes} bytes, exceeds cap ${max}`
+    );
+    this.name = "SnapshotTooLargeError";
+  }
+}
+
 export async function saveSnapshot(
   roomId: string,
   state: Uint8Array
 ): Promise<void> {
+  if (state.byteLength > SNAPSHOT_MAX_BYTES) {
+    throw new SnapshotTooLargeError(
+      roomId,
+      state.byteLength,
+      SNAPSHOT_MAX_BYTES
+    );
+  }
   const buffer = Buffer.from(state);
   await withConnection(async (conn) => {
     await conn.execute(
       `MERGE INTO room_snapshots s
-         USING (SELECT :roomId AS room_id FROM dual) src
+         USING (SELECT :roomId AS room_id, :state AS yjs_state FROM dual) src
          ON (s.room_id = src.room_id)
        WHEN MATCHED THEN
-         UPDATE SET yjs_state = :state, snapshot_at = CURRENT_TIMESTAMP
+         UPDATE SET yjs_state = src.yjs_state, snapshot_at = CURRENT_TIMESTAMP
        WHEN NOT MATCHED THEN
-         INSERT (room_id, yjs_state) VALUES (:roomId, :state)`,
+         INSERT (room_id, yjs_state) VALUES (src.room_id, src.yjs_state)`,
       { roomId, state: buffer },
       { autoCommit: true }
     );

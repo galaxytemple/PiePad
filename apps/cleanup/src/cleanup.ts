@@ -1,8 +1,4 @@
-import {
-  deleteRoom,
-  listExpiredRooms,
-  recordRoomDeletion,
-} from "@piepad/db";
+import { deleteRoomWithAudit, listExpiredRooms } from "@piepad/db";
 
 const WS_INTERNAL_URL =
   process.env.WS_INTERNAL_URL ?? "http://127.0.0.1:1234";
@@ -53,8 +49,9 @@ export async function runCleanupOnce(): Promise<CleanupSummary> {
       // banner before we yank the row out. Also drops the LevelDB entry
       // even if no doc is in memory.
       await evictFromWs(room.id);
-      await deleteRoom(room.id);
-      await recordRoomDeletion(room.id, room.name, "30_DAY_INACTIVITY");
+      // Audit + delete commit together — partial state (deleted with no audit
+      // row, or audit row with no delete) is impossible.
+      await deleteRoomWithAudit(room.id, room.name, "30_DAY_INACTIVITY");
       deleted += 1;
       console.log(
         `[cleanup] deleted room ${room.id} "${room.name}" (idle since ${room.lastAccessedAt.toISOString()})`

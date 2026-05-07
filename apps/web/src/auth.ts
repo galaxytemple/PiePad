@@ -12,6 +12,12 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
   callbacks: {
     async signIn({ user, account, profile }) {
       if (!user.email) return false;
+      // Reject Google accounts that haven't verified ownership of the email —
+      // ADMIN_EMAILS is matched against this address, so an unverified match
+      // would be an account-takeover vector.
+      if (account?.provider === "google" && profile?.email_verified !== true) {
+        return false;
+      }
       try {
         const dbUser = await upsertOAuthUser({
           email: user.email,

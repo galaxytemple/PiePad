@@ -25,6 +25,11 @@ fs.mkdirSync(LEVELDB_PATH, { recursive: true });
 const ldb = new LeveldbPersistence(LEVELDB_PATH);
 
 const dirtyRooms = new Set<string>();
+// Rooms in the middle of being evicted. The snapshot worker must skip these:
+// once /internal/evict starts, the row may be DELETEd (via cleanup or admin
+// action) before our next save lands, and a stale dirty entry would either
+// resurrect the doc or trip the FK on room_snapshots.
+const evictingRooms = new Set<string>();
 
 export function getDirtyRooms(): ReadonlySet<string> {
   return dirtyRooms;
@@ -32,6 +37,18 @@ export function getDirtyRooms(): ReadonlySet<string> {
 
 export function clearDirty(roomId: string): void {
   dirtyRooms.delete(roomId);
+}
+
+export function markEvicting(roomId: string): void {
+  evictingRooms.add(roomId);
+}
+
+export function unmarkEvicting(roomId: string): void {
+  evictingRooms.delete(roomId);
+}
+
+export function isEvicting(roomId: string): boolean {
+  return evictingRooms.has(roomId);
 }
 
 async function hydrateFromOracle(
