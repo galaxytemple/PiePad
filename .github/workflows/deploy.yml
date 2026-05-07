@@ -23,10 +23,41 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
+          set -e
+
+          if [ -z "${DEPLOY_HOST:-}" ]; then
+            echo "::error::DEPLOY_HOST secret is empty"; exit 1
+          fi
+          if [ -z "${DEPLOY_SSH_KEY:-}" ]; then
+            echo "::error::DEPLOY_SSH_KEY secret is empty"; exit 1
+          fi
+
           mkdir -p ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
           chmod 600 ~/.ssh/deploy
-          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+          # Sanity-check the private key shape without leaking the body
+          if ! grep -q -- '-----BEGIN' ~/.ssh/deploy; then
+            echo "::error::DEPLOY_SSH_KEY does not look like a PEM private key (missing BEGIN line)"
+            exit 1
+          fi
+          echo "Key first line: $(head -1 ~/.ssh/deploy)"
+          echo "Key last line:  $(tail -1 ~/.ssh/deploy)"
+          echo "Key line count: $(wc -l < ~/.ssh/deploy)"
+
+          # ssh-keyscan times out at 5s by default; bump it and don't let
+          # `-H` errors silently mask connectivity failures.
+          if ! ssh-keyscan -T 15 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2> /tmp/keyscan.err; then
+            echo "::error::ssh-keyscan failed against $DEPLOY_HOST"
+            cat /tmp/keyscan.err
+            exit 1
+          fi
+          if [ ! -s ~/.ssh/known_hosts ]; then
+            echo "::error::ssh-keyscan produced no host keys — is port 22 open from GitHub runners?"
+            cat /tmp/keyscan.err
+            exit 1
+          fi
+          echo "known_hosts entries: $(wc -l < ~/.ssh/known_hosts)"
 
       # Build .env on the runner from Secrets so production credentials never
       # land in the repo and the VM doesn't need a credential file of its own.
