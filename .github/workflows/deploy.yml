@@ -47,11 +47,17 @@ jobs:
 
           # Direct TCP probe first — distinguishes network/firewall block
           # from an actual ssh-keyscan failure mode.
-          echo "TCP 22 reachability:"
-          if command -v nc >/dev/null 2>&1; then
-            nc -vz -w 10 "$DEPLOY_HOST" 22 2>&1 | sed 's/^/  /' || true
-          fi
+          echo "DEPLOY_HOST length: ${#DEPLOY_HOST}"
           echo "Runner public IP: $(curl -fsS https://api.ipify.org || echo unknown)"
+
+          echo "TCP 22 via DEPLOY_HOST secret:"
+          nc -vz -w 5 "$DEPLOY_HOST" 22 2>&1 | sed 's/^/  /' || true
+
+          # Hard-coded comparison — if this succeeds but the secret-based
+          # one above fails, the secret value is wrong. If both fail, the
+          # network/Security-List path is blocked from this runner IP.
+          echo "TCP 22 via hard-coded 170.9.57.93:"
+          nc -vz -w 5 170.9.57.93 22 2>&1 | sed 's/^/  /' || true
 
           # ssh-keyscan times out at 5s by default; bump it and don't let
           # `-H` errors silently mask connectivity failures.
@@ -125,15 +131,16 @@ jobs:
           ssh -i ~/.ssh/deploy "$DEPLOY_USER@$DEPLOY_HOST" \
             "chmod 600 /opt/piepad/.env && chmod +x /opt/piepad/scripts/dc /opt/piepad/scripts/install-piston-langs.sh"
 
-      - name: Migrate, build, restart
+      # DB schema is managed manually from a local Flyway run against the
+      # Autonomous DB — the deploy user intentionally lacks CREATE TABLE,
+      # so we never run `flyway migrate` from CI.
+      - name: Build, restart
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
           ssh -i ~/.ssh/deploy "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail
             cd /opt/piepad
-
-            ./scripts/dc --profile tools run --rm flyway migrate
 
             ./scripts/dc up -d --build --remove-orphans
 
