@@ -153,6 +153,12 @@ jobs:
 
             ./scripts/dc up -d --build --remove-orphans
 
+            # The Caddyfile is bind-mounted, so 'up' won't recreate caddy on
+            # config-file edits — only image/compose changes trigger that.
+            # Force a reload so Caddyfile changes land in the same deploy.
+            ./scripts/dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile \
+              || ./scripts/dc restart caddy
+
             docker image prune -f
           "
 
