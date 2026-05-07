@@ -53,12 +53,17 @@ services:
     depends_on:
       ws:
         condition: service_healthy
+    # TCP-port liveness check. Hitting "/" goes through Auth.js + the proxy
+    # 302 to /login, and on a cold container that chain occasionally exceeds
+    # the 5s timeout — caddy then refuses to start because depends_on is
+    # service_healthy. "Process is listening on 3000" is the actual
+    # condition caddy needs to reverse-proxy.
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      test: ["CMD-SHELL", "node -e \"require('net').connect({host:'127.0.0.1',port:3000}).on('connect',function(){this.end();process.exit(0)}).on('error',function(){process.exit(1)})\""]
       interval: 30s
       timeout: 5s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 60s
     # 1GB ARM box; Next.js standalone runtime sits comfortably under 384MB
     # even at peak. mem_limit makes OOM-killer behaviour deterministic
     # instead of letting it pick at random across containers.
@@ -78,11 +83,11 @@ services:
       - ../wallet:/wallet:ro
       - ws_data:/data/yjs
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:1234/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:1234/health',function(r){process.exit(r.statusCode===200?0:1)}).on('error',function(){process.exit(1)}).setTimeout(3000,function(){this.destroy();process.exit(1)})\""]
       interval: 30s
       timeout: 5s
-      retries: 3
-      start_period: 20s
+      retries: 5
+      start_period: 30s
     mem_limit: 256m
 
   cleanup:
