@@ -15,6 +15,7 @@
     "db:migrate": "./scripts/dc --profile tools run --rm flyway migrate",
     "db:info": "./scripts/dc --profile tools run --rm flyway info",
     "db:validate": "./scripts/dc --profile tools run --rm flyway validate",
+    "db:repair": "./scripts/dc --profile tools run --rm flyway repair",
     "piston:up": "./scripts/dc --profile runtime up -d piston",
     "piston:down": "./scripts/dc --profile runtime down",
     "piston:install": "./scripts/install-piston-langs.sh",

@@ -1,65 +1,26 @@
--- V4: timestamp consistency + admin sort index + tighter rooms.id width.
+-- V4: admin sort index. Other planned changes were dropped — see below.
 --
--- Background. ATP currently runs all sessions in UTC, so the previous
--- TIMESTAMP-without-zone columns happen to behave correctly today, but
--- TIMESTAMP WITH LOCAL TIME ZONE is the correct semantic and removes the
--- latent risk if a future session ever changes its TZ. SYSTIMESTAMP / the
--- existing CURRENT_TIMESTAMP defaults all return WITH TIME ZONE values
--- already; Oracle silently strips the zone on the way into TIMESTAMP today.
+-- The original V4 also tried to:
+--   1) widen all timestamp columns to TIMESTAMP WITH LOCAL TIME ZONE
+--   2) shrink rooms.id (and FK partners) from VARCHAR2(32) to VARCHAR2(16)
+--
+-- Oracle rejects (1) with ORA-01439 ("column to be modified must be empty
+-- to change datatype") because the rows already contain data. The proper
+-- path is a column rename trick (add new col, UPDATE-copy, drop old,
+-- rename new) — deferred until we actually need WITH LOCAL TIME ZONE
+-- semantics. ATP runs sessions in UTC by default so the practical risk
+-- is academic.
+--
+-- (2) is omitted to keep this migration minimal after the V4 retry.
+-- Tracked separately for a future migration once the timestamp story is
+-- resolved (both touch the same MODIFY-on-populated-column constraint).
 --
 -- Run locally from a workstation with the table-owner schema's DDL
 -- privileges. The runtime user (APP_PROD_USER) intentionally has no DDL —
 -- this migration must NEVER run from CI.
 
--- --- timestamps -------------------------------------------------------------
-ALTER TABLE rooms MODIFY (
-  created_at       TIMESTAMP WITH LOCAL TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  last_accessed_at TIMESTAMP WITH LOCAL TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
-ALTER TABLE room_snapshots MODIFY (
-  snapshot_at TIMESTAMP WITH LOCAL TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
-ALTER TABLE room_deletions MODIFY (
-  deleted_at TIMESTAMP WITH LOCAL TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
-ALTER TABLE users MODIFY (
-  created_at    TIMESTAMP WITH LOCAL TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  last_login_at TIMESTAMP WITH LOCAL TIME ZONE
-);
-
-ALTER TABLE user_oauth_accounts MODIFY (
-  created_at TIMESTAMP WITH LOCAL TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
-ALTER TABLE room_visits MODIFY (
-  first_visited_at TIMESTAMP WITH LOCAL TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  last_visited_at  TIMESTAMP WITH LOCAL TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- --- indexes ----------------------------------------------------------------
--- /admin/users orders by last_login_at DESC NULLS LAST (admin-only, low
--- traffic, but a full scan + sort on every visit). NULLS LAST mirrors the
--- query so the index can be used directly without a sort step.
+-- /admin/users orders by last_login_at DESC NULLS LAST. Without this index
+-- the page does a full users scan + sort on every visit. NULLS LAST mirrors
+-- the query so the index can satisfy ORDER BY without a sort step.
 CREATE INDEX idx_users_last_login
   ON users (last_login_at DESC NULLS LAST);
-
--- --- column widths ----------------------------------------------------------
--- nanoid(12) → 12 chars. VARCHAR2(32) was over-provisioned. Tightening to
--- VARCHAR2(16) leaves headroom for any future id-length bump while shaving
--- bytes off every FK index entry (rooms, room_snapshots, room_visits,
--- room_deletions all carry a room_id).
---
--- Oracle requires CASCADE CONSTRAINTS to alter a column referenced by FKs;
--- the type/precision change of a VARCHAR2 to a smaller width is allowed
--- only when no row exceeds the new size — make sure to check before
--- running on a populated DB:
---
---   SELECT MAX(LENGTH(id)) FROM rooms;
---
-ALTER TABLE rooms MODIFY (id VARCHAR2(16));
-ALTER TABLE room_snapshots MODIFY (room_id VARCHAR2(16));
-ALTER TABLE room_visits MODIFY (room_id VARCHAR2(16));
-ALTER TABLE room_deletions MODIFY (room_id VARCHAR2(16));
