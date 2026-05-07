@@ -54,7 +54,6 @@ function resolveSchema(): string | undefined {
 export async function getPool(): Promise<Pool> {
   if (pool) return pool;
   const walletDir = resolveWalletDir();
-  const schema = resolveSchema();
   // ADB wallet zip ships cwallet.sso (autologin) for JDBC, but node-oracledb
   // Thin mode opens the encrypted ewallet.p12 instead and therefore requires
   // the wallet password set during ADB wallet download. See lessons.md.
@@ -68,17 +67,6 @@ export async function getPool(): Promise<Pool> {
     poolMin: 1,
     poolMax: 8,
     poolIncrement: 1,
-    // Login user and table-owner schema can differ (e.g. APP_PROD_USER
-    // logs in but tables live in APP_PROD_SCHEMA). Set CURRENT_SCHEMA
-    // once per physical pool session so unqualified table names in app
-    // queries resolve into the owner's schema.
-    sessionCallback: schema
-      ? async (connection: Connection): Promise<void> => {
-          await connection.execute(
-            `ALTER SESSION SET CURRENT_SCHEMA = ${schema}`
-          );
-        }
-      : undefined,
   });
   return pool;
 }
@@ -89,6 +77,16 @@ export async function withConnection<T>(
   const p = await getPool();
   const conn = await p.getConnection();
   try {
+    // Login user and table-owner schema can differ (e.g. APP_PROD_USER
+    // logs in but tables live in APP_PROD_SCHEMA). Set CURRENT_SCHEMA
+    // every time we check out a connection so unqualified table names
+    // resolve into the owner's schema. We tried oracledb's sessionCallback
+    // for this (one-shot per pool session) but it hung connection acquisition
+    // in 6.6 — running it here is idempotent and trivial overhead.
+    const schema = resolveSchema();
+    if (schema) {
+      await conn.execute(`ALTER SESSION SET CURRENT_SCHEMA = ${schema}`);
+    }
     return await fn(conn);
   } finally {
     await conn.close();
