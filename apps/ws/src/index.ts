@@ -109,6 +109,11 @@ server.on("upgrade", (req, socket, head) => {
           result.reason === "bad_room_id"
             ? "400 Bad Request"
             : "401 Unauthorized";
+        // Surface why we rejected so the deploy logs can pinpoint
+        // misconfigured cookies / missing rooms / locked rooms.
+        console.warn(
+          `[ws-upgrade] rejected ${req.url} reason=${result.reason}`
+        );
         rejectUpgrade(socket, statusLine);
         return;
       }
