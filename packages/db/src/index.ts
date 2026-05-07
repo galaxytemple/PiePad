@@ -207,29 +207,34 @@ export async function upsertOAuthUser(
       nickname = null;
     }
 
-    // Reference src.* in both branches: oracledb Thin chokes on bind names
-    // reused between USING and INSERT/UPDATE clauses (same root cause as
-    // upsertRoomVisit's ORA-00923).
-    await conn.execute(
-      `MERGE INTO user_oauth_accounts a
-         USING (SELECT :provider AS p,
-                       :subject  AS s,
-                       :userId   AS uid,
-                       :email    AS em
-                  FROM dual) src
-         ON (a.provider = src.p AND a.provider_subject = src.s)
-       WHEN MATCHED THEN
-         UPDATE SET provider_email = src.em, user_id = src.uid
-       WHEN NOT MATCHED THEN
-         INSERT (user_id, provider, provider_subject, provider_email)
-         VALUES (src.uid, src.p, src.s, src.em)`,
+    // UPDATE-then-INSERT instead of MERGE: oracledb Thin trips ORA-00923 on
+    // MERGE statements with bind variables in the USING clause, regardless
+    // of whether bind names are reused or not. Same workaround as
+    // upsertRoomVisit — two round-trips but plain ANSI and bulletproof.
+    const oauthUpd = await conn.execute(
+      `UPDATE user_oauth_accounts
+          SET provider_email = :email, user_id = :userId
+        WHERE provider = :provider AND provider_subject = :subject`,
       {
+        email: input.email,
         userId,
         provider: input.provider,
         subject: input.providerSubject,
-        email: input.email,
       }
     );
+    if ((oauthUpd.rowsAffected ?? 0) === 0) {
+      await conn.execute(
+        `INSERT INTO user_oauth_accounts
+           (user_id, provider, provider_subject, provider_email)
+         VALUES (:userId, :provider, :subject, :email)`,
+        {
+          userId,
+          provider: input.provider,
+          subject: input.providerSubject,
+          email: input.email,
+        }
+      );
+    }
 
     await conn.commit();
     return {
@@ -387,28 +392,27 @@ export async function ensureRoom(
   createdByUserId?: number | null
 ): Promise<void> {
   await withConnection(async (conn) => {
-    // MATCHED branch doubles as touchRoomAccess so a single round-trip
-    // covers "ensure exists + bump last_accessed_at" — the WS bindState
-    // path used to fire two separate queries here.
-    await conn.execute(
-      `MERGE INTO rooms r
-         USING (SELECT :roomId AS id,
-                       :name   AS nm,
-                       :userId AS uid
-                  FROM dual) src
-         ON (r.id = src.id)
-       WHEN MATCHED THEN
-         UPDATE SET last_accessed_at = CURRENT_TIMESTAMP
-       WHEN NOT MATCHED THEN
-         INSERT (id, name, created_by_user_id)
-         VALUES (src.id, src.nm, src.uid)`,
-      {
-        roomId,
-        name: name ?? roomId,
-        userId: createdByUserId ?? null,
-      },
-      { autoCommit: true }
+    // UPDATE-then-INSERT: see oauth upsert for why we avoid MERGE on Thin.
+    // The UPDATE doubles as touchRoomAccess for the existing-row case, so
+    // bindState's connect path stays a single logical round-trip on the
+    // hot path (room already exists).
+    const upd = await conn.execute(
+      `UPDATE rooms SET last_accessed_at = CURRENT_TIMESTAMP
+        WHERE id = :roomId`,
+      { roomId }
     );
+    if ((upd.rowsAffected ?? 0) === 0) {
+      await conn.execute(
+        `INSERT INTO rooms (id, name, created_by_user_id)
+         VALUES (:roomId, :name, :userId)`,
+        {
+          roomId,
+          name: name ?? roomId,
+          userId: createdByUserId ?? null,
+        }
+      );
+    }
+    await conn.commit();
   });
 }
 
@@ -759,16 +763,20 @@ export async function saveSnapshot(
   }
   const buffer = Buffer.from(state);
   await withConnection(async (conn) => {
-    await conn.execute(
-      `MERGE INTO room_snapshots s
-         USING (SELECT :roomId AS room_id, :state AS yjs_state FROM dual) src
-         ON (s.room_id = src.room_id)
-       WHEN MATCHED THEN
-         UPDATE SET yjs_state = src.yjs_state, snapshot_at = CURRENT_TIMESTAMP
-       WHEN NOT MATCHED THEN
-         INSERT (room_id, yjs_state) VALUES (src.room_id, src.yjs_state)`,
-      { roomId, state: buffer },
-      { autoCommit: true }
+    // UPDATE-then-INSERT: see oauth upsert for why we avoid MERGE on Thin.
+    const upd = await conn.execute(
+      `UPDATE room_snapshots
+          SET yjs_state = :state, snapshot_at = CURRENT_TIMESTAMP
+        WHERE room_id = :roomId`,
+      { state: buffer, roomId }
     );
+    if ((upd.rowsAffected ?? 0) === 0) {
+      await conn.execute(
+        `INSERT INTO room_snapshots (room_id, yjs_state)
+         VALUES (:roomId, :state)`,
+        { roomId, state: buffer }
+      );
+    }
+    await conn.commit();
   });
 }
