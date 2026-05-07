@@ -15,6 +15,9 @@ jobs:
     timeout-minutes: 25
 
     steps:
+      # The runner has the source; the VM never talks to GitHub.
+      - uses: actions/checkout@v4
+
       - name: Configure SSH
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -25,12 +28,11 @@ jobs:
           chmod 600 ~/.ssh/deploy
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
-      # Build .env from GitHub Secrets so the VM never has secrets sitting in
-      # the repo working tree. Wallet stays on the VM (one-time scp during
-      # bootstrap) — too big and binary to round-trip cleanly through Secrets.
+      # Build .env on the runner from Secrets so production credentials never
+      # land in the repo and the VM doesn't need a credential file of its own.
       - name: Build .env
         run: |
-          cat > .env.deploy <<EOF
+          cat > .env <<EOF
           PUBLIC_IP=${{ secrets.PUBLIC_IP }}
           PUBLIC_HOST=${{ secrets.PUBLIC_HOST }}
 
@@ -60,25 +62,36 @@ jobs:
           CLEANUP_RUN_ON_START=true
           EOF
 
-      - name: Upload .env to VM
+      # Push the source + .env to the VM. --delete keeps it in sync with main,
+      # --exclude protects state that lives only on the VM (wallet, runtime
+      # data, build caches).
+      - name: Sync to VM
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
-          scp -i ~/.ssh/deploy -o StrictHostKeyChecking=accept-new \
-            .env.deploy "$DEPLOY_USER@$DEPLOY_HOST:/opt/piepad/.env"
-          ssh -i ~/.ssh/deploy "$DEPLOY_USER@$DEPLOY_HOST" \
-            "chmod 600 /opt/piepad/.env"
+          rsync -az --delete \
+            --exclude='.git/' \
+            --exclude='node_modules/' \
+            --exclude='**/node_modules/' \
+            --exclude='.next/' \
+            --exclude='**/.next/' \
+            --exclude='wallet/' \
+            --exclude='data/' \
+            --exclude='**/data/' \
+            -e "ssh -i ~/.ssh/deploy" \
+            ./ "$DEPLOY_USER@$DEPLOY_HOST:/opt/piepad/"
 
-      - name: Pull latest, migrate, build, restart
+          ssh -i ~/.ssh/deploy "$DEPLOY_USER@$DEPLOY_HOST" \
+            "chmod 600 /opt/piepad/.env && chmod +x /opt/piepad/scripts/dc /opt/piepad/scripts/install-piston-langs.sh"
+
+      - name: Migrate, build, restart
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
           ssh -i ~/.ssh/deploy "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail
             cd /opt/piepad
-            git fetch --depth 1 origin main
-            git reset --hard origin/main
 
             ./scripts/dc --profile tools run --rm flyway migrate
 
