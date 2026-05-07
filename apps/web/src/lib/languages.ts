@@ -11,15 +11,9 @@ export interface LanguageDef {
 
 export const LANGUAGES: readonly LanguageDef[] = [
   {
-    id: "javascript",
-    label: "JavaScript",
-    piston: {
-      language: "javascript",
-      version: "*",
-      argsHint: "Read with: process.argv[2], process.argv[3], ...",
-    },
-  },
-  {
+    // TypeScript covers both — Piston's typescript runtime accepts plain
+    // JS too since TS is a superset, so we ship only the TS package and
+    // skip the separate javascript entry to keep the runtime image lean.
     id: "typescript",
     label: "TypeScript",
     piston: {
