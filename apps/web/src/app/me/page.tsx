@@ -1,6 +1,15 @@
 import { auth, signOut } from "@/auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { getUserById, updateUserNickname } from "@piepad/db";
+import {
+  colorFor,
+  isValidPaletteColor,
+  PALETTE,
+} from "@/components/pad/types";
+import {
+  getUserById,
+  updateUserColor,
+  updateUserNickname,
+} from "@piepad/db";
 import { Avatar, Button, Card, Input } from "@heroui/react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -22,6 +31,22 @@ async function saveNickname(formData: FormData): Promise<void> {
   revalidatePath("/me");
 }
 
+async function saveColor(formData: FormData): Promise<void> {
+  "use server";
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("unauthorized");
+  const userId = Number(session.user.id);
+  if (!Number.isInteger(userId)) throw new Error("invalid session");
+
+  const raw = String(formData.get("color") ?? "auto");
+  // "auto" / unknown values both reset to NULL so the runtime falls back to
+  // the name-hashed default. Anything else must be a canonical PALETTE entry.
+  const next =
+    raw === "auto" ? null : isValidPaletteColor(raw) ? raw : null;
+  await updateUserColor(userId, next);
+  revalidatePath("/me");
+}
+
 export default async function MePage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
@@ -31,6 +56,11 @@ export default async function MePage() {
   if (!profile) redirect("/login");
 
   const displayedName = profile.nickname ?? profile.name ?? profile.email;
+  const autoColor = colorFor(displayedName);
+  // The picker shows the user's saved choice if any, otherwise highlights
+  // the auto-derived colour so the form opens "showing what you actually get".
+  const selectedColor = profile.colorPref ?? autoColor;
+  const isAuto = profile.colorPref === null;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -97,6 +127,66 @@ export default async function MePage() {
               <div>
                 <Button type="submit" variant="primary">
                   Save
+                </Button>
+              </div>
+            </form>
+          </Card.Content>
+        </Card>
+
+        <Card className="mt-6">
+          <Card.Header className="flex flex-col items-start gap-1">
+            <h2 className="text-lg font-semibold">Awareness color</h2>
+            <p className="text-xs text-default-500">
+              Your caret tint and pill colour for other viewers. &ldquo;Auto&rdquo;
+              picks a stable colour from your nickname.
+            </p>
+          </Card.Header>
+          <Card.Content>
+            <form action={saveColor} className="flex flex-col gap-4">
+              <fieldset className="flex flex-wrap items-center gap-3">
+                <legend className="sr-only">Color</legend>
+
+                <label className="relative cursor-pointer">
+                  <input
+                    type="radio"
+                    name="color"
+                    value="auto"
+                    defaultChecked={isAuto}
+                    className="peer sr-only"
+                  />
+                  <span
+                    className="flex h-9 items-center gap-2 rounded-full border border-divider bg-content1 px-3 text-sm peer-checked:border-foreground peer-checked:ring-2 peer-checked:ring-foreground"
+                  >
+                    <span
+                      aria-hidden
+                      className="h-4 w-4 rounded-full"
+                      style={{ background: autoColor }}
+                    />
+                    Auto
+                  </span>
+                </label>
+
+                {PALETTE.map((c) => (
+                  <label key={c} className="relative cursor-pointer">
+                    <input
+                      type="radio"
+                      name="color"
+                      value={c}
+                      defaultChecked={!isAuto && selectedColor === c}
+                      className="peer sr-only"
+                    />
+                    <span
+                      aria-label={c}
+                      className="block h-9 w-9 rounded-full border border-divider transition peer-checked:scale-110 peer-checked:border-foreground peer-checked:ring-2 peer-checked:ring-foreground"
+                      style={{ background: c }}
+                    />
+                  </label>
+                ))}
+              </fieldset>
+
+              <div>
+                <Button type="submit" variant="primary">
+                  Save color
                 </Button>
               </div>
             </form>

@@ -21,7 +21,9 @@ export interface PadEditorProps {
   roomName: string;
   hasPassword: boolean;
   isOwner: boolean;
-  user: { name: string; avatarUrl: string | null };
+  // color: null means "use the name-hashed default" — keeps the prop type
+  // closed under future shapes without sentinels in the call site.
+  user: { name: string; avatarUrl: string | null; color: string | null };
 }
 
 export function PadEditor(props: PadEditorProps) {

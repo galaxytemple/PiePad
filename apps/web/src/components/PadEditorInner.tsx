@@ -36,7 +36,7 @@ interface PadEditorInnerProps {
   roomName: string;
   hasPassword: boolean;
   isOwner: boolean;
-  user: { name: string; avatarUrl: string | null };
+  user: { name: string; avatarUrl: string | null; color: string | null };
 }
 
 export function PadEditorInner({
@@ -56,10 +56,12 @@ export function PadEditorInner({
   const localUser = useMemo<AwarenessUser>(
     () => ({
       name: viewer.name,
-      color: colorFor(viewer.name),
+      // User-picked colour (when set on /me) wins; otherwise fall back to
+      // the stable name-hashed default.
+      color: viewer.color ?? colorFor(viewer.name),
       avatarUrl: viewer.avatarUrl,
     }),
-    [viewer.name, viewer.avatarUrl]
+    [viewer.name, viewer.avatarUrl, viewer.color]
   );
 
   const {

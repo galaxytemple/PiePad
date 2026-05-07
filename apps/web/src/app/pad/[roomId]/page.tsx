@@ -58,6 +58,7 @@ export default async function PadPage({ params, searchParams }: PageProps) {
   const displayName =
     profile?.nickname ?? profile?.name ?? session.user.email ?? "Anon";
   const avatarUrl = profile?.avatarUrl ?? session.user.image ?? null;
+  const colorPref = profile?.colorPref ?? null;
 
   return (
     <PadEditor
@@ -65,7 +66,7 @@ export default async function PadPage({ params, searchParams }: PageProps) {
       roomName={room.name}
       hasPassword={room.hasPassword}
       isOwner={isOwner}
-      user={{ name: displayName, avatarUrl }}
+      user={{ name: displayName, avatarUrl, color: colorPref }}
     />
   );
 }

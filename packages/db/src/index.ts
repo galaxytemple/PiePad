@@ -341,6 +341,9 @@ export interface UserProfile {
   name: string | null;
   nickname: string | null;
   avatarUrl: string | null;
+  // null = use the auto-hashed default; otherwise a #RRGGBB picked from
+  // the PALETTE in apps/web/src/components/pad/types.ts.
+  colorPref: string | null;
 }
 
 export async function updateUserNickname(
@@ -357,6 +360,20 @@ export async function updateUserNickname(
   });
 }
 
+export async function updateUserColor(
+  id: number,
+  color: string | null
+): Promise<void> {
+  // Caller is responsible for validating against PALETTE; we just store.
+  await withConnection(async (conn) => {
+    await conn.execute(
+      `UPDATE users SET color_pref = :color WHERE id = :id`,
+      { id, color },
+      { autoCommit: true }
+    );
+  });
+}
+
 export async function getUserById(id: number): Promise<UserProfile | null> {
   return withConnection(async (conn) => {
     type Row = {
@@ -365,9 +382,10 @@ export async function getUserById(id: number): Promise<UserProfile | null> {
       NAME: string | null;
       NICKNAME: string | null;
       AVATAR_URL: string | null;
+      COLOR_PREF: string | null;
     };
     const result = await conn.execute<Row>(
-      `SELECT id, email, name, nickname, avatar_url
+      `SELECT id, email, name, nickname, avatar_url, color_pref
          FROM users WHERE id = :id`,
       { id },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
@@ -380,6 +398,7 @@ export async function getUserById(id: number): Promise<UserProfile | null> {
       name: row.NAME,
       nickname: row.NICKNAME,
       avatarUrl: row.AVATAR_URL,
+      colorPref: row.COLOR_PREF,
     };
   });
 }
