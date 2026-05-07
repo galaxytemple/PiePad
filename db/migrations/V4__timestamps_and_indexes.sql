@@ -19,8 +19,10 @@
 -- privileges. The runtime user (APP_PROD_USER) intentionally has no DDL —
 -- this migration must NEVER run from CI.
 
--- /admin/users orders by last_login_at DESC NULLS LAST. Without this index
--- the page does a full users scan + sort on every visit. NULLS LAST mirrors
--- the query so the index can satisfy ORDER BY without a sort step.
-CREATE INDEX idx_users_last_login
-  ON users (last_login_at DESC NULLS LAST);
+-- /admin/users orders by last_login_at DESC NULLS LAST. Oracle's CREATE
+-- INDEX does not accept NULLS FIRST/LAST in the column spec — that
+-- syntax is only valid in ORDER BY. The index is plain DESC; in practice
+-- last_login_at is set on every user INSERT and bumped on every login,
+-- so genuine NULLs are rare. Oracle will satisfy the DESC ordering from
+-- the index and handle the NULLS LAST positioning as a tiny extra step.
+CREATE INDEX idx_users_last_login ON users (last_login_at DESC);
