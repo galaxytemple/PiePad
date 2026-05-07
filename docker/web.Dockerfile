@@ -21,6 +21,13 @@ FROM deps AS build
 COPY tsconfig.base.json ./
 COPY packages/db ./packages/db
 COPY apps/web ./apps/web
+# Next.js inlines NEXT_PUBLIC_* into the client bundle at *build* time. The
+# compose env_file only injects at runtime, so without a build ARG these
+# fall through to whatever fallback the source code declares (e.g. the WS
+# URL falls back to ws://localhost:1234, which silently breaks pads in
+# production because no external connection ever reaches caddy).
+ARG NEXT_PUBLIC_WS_URL
+ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 RUN pnpm --filter @piepad/web build
 
 # ---- runtime ------------------------------------------------------------
