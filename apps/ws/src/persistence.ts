@@ -1,11 +1,6 @@
 import fs from "node:fs";
 import { createRequire } from "node:module";
-import {
-  ensureRoom,
-  getLatestSnapshot,
-  saveSnapshot,
-  touchRoomAccess,
-} from "@piepad/db";
+import { ensureRoom, getLatestSnapshot, saveSnapshot } from "@piepad/db";
 import type { Persistence } from "y-websocket/bin/utils";
 import type * as YType from "yjs";
 import type * as YLeveldbType from "y-leveldb";
@@ -109,14 +104,11 @@ export const persistence: Persistence = {
       dirtyRooms.add(roomId);
     });
 
-    void ensureRoom(roomId)
-      .then(() => touchRoomAccess(roomId))
-      .catch((err) => {
-        console.error(
-          `[persistence] ensureRoom/touch failed for ${roomId}:`,
-          err
-        );
-      });
+    // ensureRoom now also bumps last_accessed_at on the MATCHED branch — one
+    // MERGE handles both "create row if missing" and "touch on connect".
+    void ensureRoom(roomId).catch((err) => {
+      console.error(`[persistence] ensureRoom failed for ${roomId}:`, err);
+    });
   },
 
   async writeState(roomId, ydoc) {
@@ -149,4 +141,17 @@ export async function dropLeveldbDoc(roomId: string): Promise<void> {
   } catch (err) {
     console.error(`[persistence] clearDocument failed for ${roomId}:`, err);
   }
+}
+
+// Compact the room's update log into a single state-vector entry. Without
+// periodic compaction LevelDB grows monotonically with edit count even for
+// rooms whose actual document is small.
+export async function flushLeveldbDoc(roomId: string): Promise<void> {
+  await ldb.flushDocument(roomId);
+}
+
+// Re-mark a room as dirty after the snapshot worker had to bail out. Exposed
+// here so the worker can keep the dirty Set encapsulated in this module.
+export function markDirty(roomId: string): void {
+  dirtyRooms.add(roomId);
 }

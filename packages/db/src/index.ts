@@ -6,6 +6,10 @@ oracledb.fetchAsBuffer = [oracledb.BLOB];
 oracledb.autoCommit = false;
 
 let pool: Pool | undefined;
+// Concurrent first-call race: without this lock, two callers seeing pool ===
+// undefined at the same time would each call createPool and the second would
+// throw NJS-002 ("pool with this alias already exists").
+let pendingPoolInit: Promise<Pool> | null = null;
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -53,22 +57,39 @@ function resolveSchema(): string | undefined {
 
 export async function getPool(): Promise<Pool> {
   if (pool) return pool;
-  const walletDir = resolveWalletDir();
-  // ADB wallet zip ships cwallet.sso (autologin) for JDBC, but node-oracledb
-  // Thin mode opens the encrypted ewallet.p12 instead and therefore requires
-  // the wallet password set during ADB wallet download. See lessons.md.
-  pool = await oracledb.createPool({
-    user: requireEnv("ORACLE_USER"),
-    password: requireEnv("ORACLE_PASSWORD"),
-    connectString: requireEnv("ORACLE_TNS_NAME"),
-    configDir: walletDir,
-    walletLocation: walletDir,
-    walletPassword: requireEnv("ORACLE_WALLET_PASSWORD"),
-    poolMin: 1,
-    poolMax: 8,
-    poolIncrement: 1,
-  });
-  return pool;
+  if (!pendingPoolInit) {
+    pendingPoolInit = (async () => {
+      const walletDir = resolveWalletDir();
+      // ADB wallet zip ships cwallet.sso (autologin) for JDBC, but node-oracledb
+      // Thin mode opens the encrypted ewallet.p12 instead and therefore requires
+      // the wallet password set during ADB wallet download. See lessons.md.
+      const created = await oracledb.createPool({
+        user: requireEnv("ORACLE_USER"),
+        password: requireEnv("ORACLE_PASSWORD"),
+        connectString: requireEnv("ORACLE_TNS_NAME"),
+        configDir: walletDir,
+        walletLocation: walletDir,
+        walletPassword: requireEnv("ORACLE_WALLET_PASSWORD"),
+        poolMin: 1,
+        poolMax: 8,
+        poolIncrement: 1,
+        // ATP idles connections out after ~10 min; ping older-than-N-second
+        // connections at checkout so callers don't see ORA-03113/03114 on a
+        // dead socket.
+        poolPingInterval: 60,
+      });
+      pool = created;
+      return created;
+    })();
+  }
+  try {
+    return await pendingPoolInit;
+  } catch (err) {
+    // Allow a future caller to retry instead of permanently sticking to a
+    // failed init promise.
+    pendingPoolInit = null;
+    throw err;
+  }
 }
 
 export async function withConnection<T>(
@@ -89,6 +110,16 @@ export async function withConnection<T>(
     }
     return await fn(conn);
   } finally {
+    // Defensive: roll back any open transaction before returning the
+    // connection to the pool. Most queries pass autoCommit:true so this is a
+    // no-op, but a function that forgets to commit/rollback would otherwise
+    // leak an uncommitted transaction onto the next checkout.
+    try {
+      await conn.rollback();
+    } catch {
+      // If rollback throws (rare — usually only on connection death), the
+      // close below will tear the conn down anyway.
+    }
     await conn.close();
   }
 }
@@ -354,6 +385,9 @@ export async function ensureRoom(
   createdByUserId?: number | null
 ): Promise<void> {
   await withConnection(async (conn) => {
+    // MATCHED branch doubles as touchRoomAccess so a single round-trip
+    // covers "ensure exists + bump last_accessed_at" — the WS bindState
+    // path used to fire two separate queries here.
     await conn.execute(
       `MERGE INTO rooms r
          USING (SELECT :roomId AS id,
@@ -361,6 +395,8 @@ export async function ensureRoom(
                        :userId AS uid
                   FROM dual) src
          ON (r.id = src.id)
+       WHEN MATCHED THEN
+         UPDATE SET last_accessed_at = CURRENT_TIMESTAMP
        WHEN NOT MATCHED THEN
          INSERT (id, name, created_by_user_id)
          VALUES (src.id, src.nm, src.uid)`,

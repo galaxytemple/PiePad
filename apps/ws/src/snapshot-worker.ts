@@ -8,8 +8,10 @@ import { docs } from "y-websocket/bin/utils";
 import type * as YType from "yjs";
 import {
   clearDirty,
+  flushLeveldbDoc,
   getDirtyRooms,
   isEvicting,
+  markDirty,
 } from "./persistence.js";
 
 // Use the same CJS yjs instance as y-websocket/bin/utils — see persistence.ts.
@@ -46,6 +48,66 @@ function scheduleBackoff(roomId: string, now: number): number {
   return delay;
 }
 
+async function snapshotRoom(roomId: string, now: number): Promise<void> {
+  const doc = docs.get(roomId);
+  if (!doc) {
+    // Doc was evicted; persistence.writeState already snapshotted it.
+    clearDirty(roomId);
+    clearBackoff(roomId);
+    return;
+  }
+  const state = Y.encodeStateAsUpdate(doc);
+  // Refuse to overwrite a good snapshot with an empty one.
+  if (state.byteLength <= EMPTY_STATE_BYTES) {
+    clearDirty(roomId);
+    clearBackoff(roomId);
+    return;
+  }
+
+  // Race-safe ordering: clear dirty *before* awaiting saveSnapshot so any
+  // update arriving during the await re-marks via persistence's update
+  // handler. If save fails we explicitly re-mark before scheduling backoff.
+  clearDirty(roomId);
+  try {
+    await saveSnapshot(roomId, state);
+    // Compact LevelDB after Oracle accepts the snapshot — bounds disk growth
+    // for long-lived active rooms. Failure here is non-fatal: the room is
+    // still durably stored, just less compactly.
+    await flushLeveldbDoc(roomId).catch((err) => {
+      console.error(
+        `[snapshot-worker] LevelDB compact failed for ${roomId}:`,
+        err
+      );
+    });
+    // Bump last_accessed_at so the cleanup cron doesn't 30-day-evict an
+    // always-on room that never reconnects.
+    await touchRoomAccess(roomId).catch((err) => {
+      console.error(
+        `[snapshot-worker] touchRoomAccess failed for ${roomId}:`,
+        err
+      );
+    });
+    clearBackoff(roomId);
+  } catch (err) {
+    if (err instanceof SnapshotTooLargeError) {
+      // Permanent for this state — retrying with the same blob will fail
+      // identically. LevelDB still holds the live state; Oracle copy is stale.
+      console.error(
+        `[snapshot-worker] snapshot too large for ${roomId} (${err.bytes}>${err.max} bytes); skipping`
+      );
+      clearBackoff(roomId);
+      return;
+    }
+    // Re-mark dirty so the next tick retries.
+    markDirty(roomId);
+    const delay = scheduleBackoff(roomId, now);
+    console.error(
+      `[snapshot-worker] failed for ${roomId} (attempt ${consecutiveFailures.get(roomId)}, retry in ${Math.round(delay / 1000)}s):`,
+      err
+    );
+  }
+}
+
 export async function flushDirty(): Promise<void> {
   const dirty = Array.from(getDirtyRooms());
   const now = Date.now();
@@ -57,53 +119,7 @@ export async function flushDirty(): Promise<void> {
     }
     const retryAt = nextRetryAt.get(roomId);
     if (retryAt !== undefined && retryAt > now) continue;
-
-    const doc = docs.get(roomId);
-    if (!doc) {
-      // Doc was evicted; persistence.writeState already snapshotted it.
-      clearDirty(roomId);
-      clearBackoff(roomId);
-      continue;
-    }
-    try {
-      const state = Y.encodeStateAsUpdate(doc);
-      // Refuse to overwrite a good snapshot with an empty one.
-      if (state.byteLength <= EMPTY_STATE_BYTES) {
-        clearDirty(roomId);
-        clearBackoff(roomId);
-        continue;
-      }
-      await saveSnapshot(roomId, state);
-      // Rooms with continuous edits never reconnect, so without this an active
-      // pad's last_accessed_at would freeze at first-connect time and the
-      // 30-day cleanup would silently delete it.
-      await touchRoomAccess(roomId).catch((err) => {
-        console.error(
-          `[snapshot-worker] touchRoomAccess failed for ${roomId}:`,
-          err
-        );
-      });
-      clearDirty(roomId);
-      clearBackoff(roomId);
-    } catch (err) {
-      if (err instanceof SnapshotTooLargeError) {
-        // Permanent for this state — retrying with the same blob will fail
-        // identically. Drop dirty so the next update gets a fresh chance.
-        // LevelDB still holds the live state; Oracle snapshot is stale.
-        console.error(
-          `[snapshot-worker] snapshot too large for ${roomId} (${err.bytes}>${err.max} bytes); skipping`
-        );
-        clearDirty(roomId);
-        clearBackoff(roomId);
-        continue;
-      }
-      const delay = scheduleBackoff(roomId, now);
-      console.error(
-        `[snapshot-worker] failed for ${roomId} (attempt ${consecutiveFailures.get(roomId)}, retry in ${Math.round(delay / 1000)}s):`,
-        err
-      );
-      // Keep dirty so a future tick retries.
-    }
+    await snapshotRoom(roomId, now);
   }
 }
 
