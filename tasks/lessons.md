@@ -366,3 +366,146 @@ start of related work to avoid repeating the same mistakes.
 - **Constraint**: `dynamic({ ssr: false })` must live inside a Client
   Component. Server Components can render the wrapper, but cannot call
   `dynamic` with `ssr: false` directly.
+
+## Bash
+
+### `cd && exec <bare-name>` is dangerous when the cwd shadows PATH
+
+- **Symptom**: `./scripts/dc up -d` fails inside SSH with
+  `exec: docker: cannot execute: Is a directory`. The same script works
+  fine in an interactive shell.
+- **Cause**: After `cd "$(dirname "$0")/.."` the cwd is the repo root,
+  which contains a `docker/` directory. Non-interactive SSH sessions
+  often start with a stripped/empty PATH; when `exec docker compose ...`
+  runs in a shell with no usable PATH, `docker` resolves to the local
+  `docker/` directory and the kernel rejects exec'ing a directory.
+- **Fix**: Resolve the binary to an absolute path *before* `cd`:
+  ```bash
+  DOCKER_BIN="$(command -v docker || echo /usr/bin/docker)"
+  cd "$(dirname "$0")/.."
+  exec "$DOCKER_BIN" compose ...
+  ```
+- **General rule**: any time a script does `cd` followed by `exec <bare>`,
+  capture the absolute path first. PATH is not guaranteed and the cwd can
+  silently win.
+
+## Auth.js v5
+
+### Behind a reverse proxy, `AUTH_TRUST_HOST=true` and `AUTH_URL` are both required
+
+- **Symptom**: After deploying behind Caddy/nginx, the browser hits
+  `ERR_TOO_MANY_REDIRECTS` on every page. Container logs show
+  `[auth][error] UntrustedHost: Host must be trusted. URL was: https://<public host>/api/auth/session`.
+  Sometimes the `/login` page itself redirects to `/`, sometimes the
+  user lands on `https://0.0.0.0:3000/api/auth/error?error=Configuration`.
+- **Cause**: Caddy terminates TLS and forwards to `web:3000` over HTTP.
+  Inside the container the request `Host` header is the internal service
+  name, so Auth.js v5 (which refuses unknown hosts in production by
+  default) throws `UntrustedHost` on every `auth()` call. The throw
+  bubbles into the proxy/middleware redirect logic and creates a loop.
+  Even after `AUTH_TRUST_HOST=true` quiets the throw, Auth.js needs a
+  canonical absolute URL to build OAuth callback / error / signin
+  redirect pages — without `AUTH_URL` it falls back to the container's
+  listen address (`0.0.0.0:3000`) and sends users to broken URLs.
+- **Fix**: set both in the production env:
+  ```
+  AUTH_TRUST_HOST=true
+  AUTH_URL=https://${PUBLIC_HOST}
+  ```
+  Local Playwright tests don't catch this because they hit the dev server
+  directly with no proxy. Add both to `.env.example` and to the deploy
+  pipeline's secret-built `.env`.
+
+## node-oracledb
+
+### Pool `sessionCallback` (async form) hangs connection acquisition in 6.6
+
+- **Symptom**: every request times out with
+  `NJS-040: connection request timeout. Request exceeded "queueTimeout" of 60000`.
+  Local dev was fine because the callback wasn't installed there
+  (no `ORACLE_SCHEMA` set → branch was skipped).
+- **Cause**: oracledb 6.6's `sessionCallback` option, when given an async
+  function returning a Promise, fails to release the connection back to
+  the pool after the callback resolves. Subsequent `getConnection()`
+  calls queue forever and eventually hit `queueTimeout`.
+- **Fix**: drop `sessionCallback` and run the per-session setup inside
+  the wrapper that checks out a connection:
+  ```ts
+  export async function withConnection<T>(fn: (c: Connection) => Promise<T>) {
+    const conn = await (await getPool()).getConnection();
+    try {
+      const schema = process.env.ORACLE_SCHEMA;
+      if (schema) {
+        await conn.execute(`ALTER SESSION SET CURRENT_SCHEMA = ${schema}`);
+      }
+      return await fn(conn);
+    } finally {
+      await conn.close();
+    }
+  }
+  ```
+  One extra round-trip per checkout, can't hang the pool, works
+  regardless of how oracledb resolves callback signatures internally.
+
+### Login user vs. table-owner schema: `ALTER SESSION SET CURRENT_SCHEMA` only changes name resolution
+
+- **Symptom**: queries hit `ORA-00942: table or view "<LOGIN_USER>"."<TABLE>" does not exist`
+  even though the table clearly exists in another schema.
+- **Cause**: Oracle resolves unqualified table names against the connected
+  user's schema by default. When app code expects `users` to live in
+  `APP_PROD_SCHEMA` but the login user is `APP_PROD_USER`, the resolution
+  goes to `APP_PROD_USER.users` (which doesn't exist).
+- **Fix**: per session, run `ALTER SESSION SET CURRENT_SCHEMA = APP_PROD_SCHEMA`.
+  This only flips the default name-resolution schema — it does *not*
+  grant any privileges. The login user still needs DML grants on the
+  owner schema's objects. With Oracle 23ai, prefer the schema-level
+  privilege form so new tables added by future migrations are auto-covered:
+  ```sql
+  GRANT SELECT ANY TABLE   ON SCHEMA APP_PROD_SCHEMA TO APP_PROD_DML_ROLE;
+  GRANT INSERT ANY TABLE   ON SCHEMA APP_PROD_SCHEMA TO APP_PROD_DML_ROLE;
+  GRANT UPDATE ANY TABLE   ON SCHEMA APP_PROD_SCHEMA TO APP_PROD_DML_ROLE;
+  GRANT DELETE ANY TABLE   ON SCHEMA APP_PROD_SCHEMA TO APP_PROD_DML_ROLE;
+  GRANT APP_PROD_DML_ROLE TO APP_PROD_USER;
+  ```
+  Note: `READ ANY TABLE` ≠ `SELECT ANY TABLE`. `READ` cannot lock rows
+  (no `SELECT FOR UPDATE`); some queries inside transactions still demand
+  `SELECT`. Grant `SELECT` to be safe, and `READ` is redundant once you do.
+
+## Piston
+
+### Public emkc.org API is whitelist-only as of 2026-02-15
+
+- **Symptom**: `/api/run` returns 502 with body
+  `{"message":"Public Piston API is now whitelist only as of 2/15/2026.
+  Please contact EngineerMan on Discord with use case justification or
+  consider hosting your own Piston instance."}` (HTTP 401 from emkc).
+- **Cause**: policy change. Anonymous public access ended.
+- **Fix**: self-host. PiePad's pattern: a separate small VM (1GB E2 is
+  fine for python+typescript only) running just the Piston container,
+  reachable from the app VM over a private (or SL-restricted public)
+  IP at `http://<piston-host>:2000/api/v2`. The `runtime` profile in
+  `docker/docker-compose.yml` is the local-dev variant; production uses
+  a standalone `docker run` on the dedicated host so the app stack
+  doesn't pull in the Piston image.
+
+### Public Piston response shape differs from self-host — parse defensively
+
+- **Symptom**: `/api/run` crashes on `result.run.stdout` because `run`
+  is undefined. Or rejected requests return HTTP 200 with
+  `{"message": "..."}` and no `run` block.
+- **Cause**: emkc.org's public API surface diverges from the OSS
+  Piston server in a few places: `run_timeout`/`compile_timeout` are
+  capped at 3000ms (anything larger gets a 400), validation errors
+  come back as HTTP 200 + `{message}` rather than 4xx, and some
+  responses omit the `compile` stream entirely.
+- **Fix**: in `apps/web/src/app/api/run/route.ts` —
+  - clamp `run_timeout`/`compile_timeout` to 3000ms when `PISTON_URL`
+    contains `emkc.org`,
+  - read the body once as text so the same buffer covers JSON-parse
+    failures and shape mismatches,
+  - treat `{message}` at HTTP 200 as `piston_rejected`,
+  - treat valid JSON missing `run` as `piston_invalid_response`,
+  - default every field through helpers (`pickString`, `pickIntOrNull`,
+    `pickStringOrNull`) so a missing key never crashes the route.
+  Now obsolete since we self-host, but keep the guards — they're cheap
+  and protect against any future upstream wobble.

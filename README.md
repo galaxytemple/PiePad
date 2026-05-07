@@ -5,8 +5,14 @@ Real-time collaborative notepad with code execution, deployed on Oracle Cloud In
 ## Stack
 - Next.js 16 (App Router) + Monaco Editor
 - Yjs + y-websocket (CRDT real-time sync)
-- Self-hosted Piston for code execution
-- Oracle Autonomous Database (mTLS) for metadata + Yjs snapshot persistence
+- Auth.js v5 + Google OAuth
+- Piston for code execution (self-hosted on a dedicated VM in production;
+  the public emkc.org endpoint became whitelist-only on 2026-02-15 and
+  is no longer used)
+- Oracle Autonomous Database 23ai (mTLS) for metadata + Yjs snapshot
+  persistence. Production splits the login user from the table-owner
+  schema (e.g. `APP_PROD_USER` logs in, `APP_PROD_SCHEMA` owns the
+  tables) for least-privilege at runtime
 - LevelDB for hot Yjs state
 - Caddy for HTTPS via `<ip>.sslip.io` + Let's Encrypt
 - Docker Compose, deployed via GitHub Actions over SSH
@@ -38,27 +44,27 @@ docker/
 ```bash
 cp .env.example .env   # fill in values
 pnpm install
-pnpm db:migrate        # runs Flyway in Docker
+pnpm db:migrate        # runs Flyway in Docker (run with DDL-capable creds)
 pnpm dev:web           # in one terminal
 pnpm dev:ws            # in another
 ```
 
+`pnpm db:migrate` is run **locally**, not in CI — the production deploy
+intentionally uses a runtime user without DDL privileges, so schema
+changes are applied from a workstation with owner credentials before
+the matching code merges. See `docs/deploy.md` §2.
+
 ## Bootstrapping an Admin
 
-There is no in-app admin signup. Insert a row directly:
+There is no in-app admin signup and no `admins` table (it was dropped in
+V3 — auth went OAuth-only). Effective admin = email listed in the
+`ADMIN_EMAILS` env var (comma-separated), checked at request time.
 
-```bash
-# 1. Generate a bcrypt hash locally
-node -e "console.log(require('bcrypt').hashSync('your-strong-password', 12))"
-```
-
-```sql
--- 2. Connect to Oracle and run:
-INSERT INTO admins (username, password_hash)
-VALUES ('admin', '$2b$12$...');
-COMMIT;
+```env
+# .env
+ADMIN_EMAILS=you@example.com,teammate@example.com
 ```
 
 ## Deployment
 
-See `docs/deploy.md` (TBD).
+See `docs/deploy.md`.
