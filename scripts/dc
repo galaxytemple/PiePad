@@ -12,5 +12,12 @@
 
 set -euo pipefail
 
+# Resolve docker via PATH but fall back to /usr/bin/docker, because:
+#   - non-interactive SSH sessions sometimes have a stripped PATH
+#   - cwd will hold a `docker/` directory after the cd below, and an empty
+#     PATH entry would make `exec docker` resolve to that directory, not
+#     the binary, with the cryptic "Is a directory" error.
+DOCKER_BIN="$(command -v docker || echo /usr/bin/docker)"
+
 cd "$(dirname "$0")/.."
-exec docker compose --env-file .env -f docker/docker-compose.yml "$@"
+exec "$DOCKER_BIN" compose --env-file .env -f docker/docker-compose.yml "$@"
