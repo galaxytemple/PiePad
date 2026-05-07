@@ -11,15 +11,27 @@ export const runtime = "nodejs";
 // Default targets a local container, IPv4 to dodge Node's IPv6-first
 // localhost resolution against Docker's IPv4-only port mapping.
 const PISTON_URL = process.env.PISTON_URL ?? "http://127.0.0.1:2000/api/v2";
+// emkc.org public API caps run_timeout/compile_timeout at 3000ms and 400s
+// the request when we exceed it. Clamp anything pointed at the public host.
+const IS_PUBLIC_PISTON = /emkc\.org/i.test(PISTON_URL);
+const PUBLIC_PISTON_MAX_TIMEOUT_MS = 3_000;
 const RATE_LIMIT_PER_MINUTE = Number(
   process.env.RUN_RATE_LIMIT_PER_MINUTE ?? 10
 );
-const RUN_TIMEOUT_MS = Number(process.env.RUN_TIMEOUT_MS ?? 10_000);
-const COMPILE_TIMEOUT_MS = Number(
-  process.env.COMPILE_TIMEOUT_MS ?? RUN_TIMEOUT_MS
+const RUN_TIMEOUT_MS = clampTimeout(
+  Number(process.env.RUN_TIMEOUT_MS ?? 10_000)
+);
+const COMPILE_TIMEOUT_MS = clampTimeout(
+  Number(process.env.COMPILE_TIMEOUT_MS ?? RUN_TIMEOUT_MS)
 );
 // Margin so Piston's own kill-on-timeout fires before our fetch aborts.
 const FETCH_ABORT_MARGIN_MS = 5_000;
+
+function clampTimeout(ms: number): number {
+  if (!Number.isFinite(ms) || ms <= 0) return PUBLIC_PISTON_MAX_TIMEOUT_MS;
+  if (IS_PUBLIC_PISTON) return Math.min(ms, PUBLIC_PISTON_MAX_TIMEOUT_MS);
+  return ms;
+}
 
 const RunSchema = z.object({
   language: z.string().min(1).max(50),
@@ -29,18 +41,33 @@ const RunSchema = z.object({
 });
 
 interface PistonStream {
-  stdout: string;
-  stderr: string;
-  output: string;
-  code: number | null;
-  signal: string | null;
+  stdout?: string;
+  stderr?: string;
+  output?: string;
+  code?: number | null;
+  signal?: string | null;
 }
 
 interface PistonResponse {
-  language: string;
-  version: string;
-  run: PistonStream;
+  language?: string;
+  version?: string;
+  run?: PistonStream;
   compile?: PistonStream;
+  // Public emkc.org returns { message: "..." } on validation errors even
+  // when status is 200, so accept it as part of the parsed shape.
+  message?: string;
+}
+
+function pickString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function pickIntOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function pickStringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 // Per-user token bucket. In-memory only — resets on process restart and
@@ -115,29 +142,70 @@ export async function POST(req: Request): Promise<NextResponse> {
       }),
     });
 
+    // Read body once as text so we can log raw output when JSON parsing
+    // or shape assumptions fail — the public emkc.org API has surprised
+    // us with both error shapes and timeout-cap rejections.
+    const rawBody = await pistonRes.text();
+
     if (!pistonRes.ok) {
-      const text = await pistonRes.text();
       console.error("[/api/run] Piston returned non-2xx", {
         url: PISTON_URL,
         status: pistonRes.status,
-        body: text,
+        body: rawBody,
         sent: { language, version },
       });
       return NextResponse.json(
-        { error: "piston_error", status: pistonRes.status, body: text },
+        { error: "piston_error", status: pistonRes.status, body: rawBody },
         { status: 502 }
       );
     }
 
-    const result = (await pistonRes.json()) as PistonResponse;
+    let result: PistonResponse;
+    try {
+      result = JSON.parse(rawBody) as PistonResponse;
+    } catch {
+      console.error("[/api/run] Piston returned non-JSON body", {
+        url: PISTON_URL,
+        body: rawBody.slice(0, 500),
+      });
+      return NextResponse.json(
+        { error: "piston_invalid_response", body: rawBody.slice(0, 500) },
+        { status: 502 }
+      );
+    }
+
+    // Public API uses { message } for validation errors at HTTP 200.
+    if (!result.run && result.message) {
+      console.error("[/api/run] Piston rejected request", {
+        url: PISTON_URL,
+        message: result.message,
+        sent: { language, version },
+      });
+      return NextResponse.json(
+        { error: "piston_rejected", message: result.message },
+        { status: 502 }
+      );
+    }
+
+    if (!result.run) {
+      console.error("[/api/run] Piston response missing run section", {
+        url: PISTON_URL,
+        body: rawBody.slice(0, 500),
+      });
+      return NextResponse.json(
+        { error: "piston_invalid_response", body: rawBody.slice(0, 500) },
+        { status: 502 }
+      );
+    }
+
     return NextResponse.json({
-      language: result.language,
-      version: result.version,
-      stdout: result.run.stdout,
-      stderr: result.run.stderr,
-      code: result.run.code,
-      signal: result.run.signal,
-      compileStderr: result.compile?.stderr ?? null,
+      language: pickString(result.language) || language,
+      version: pickString(result.version) || version,
+      stdout: pickString(result.run.stdout),
+      stderr: pickString(result.run.stderr),
+      code: pickIntOrNull(result.run.code),
+      signal: pickStringOrNull(result.run.signal),
+      compileStderr: pickStringOrNull(result.compile?.stderr),
     });
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {

@@ -503,6 +503,9 @@ const FRIENDLY_ERROR_MESSAGES: Record<string, string> = {
   piston_unreachable:
     "Code execution server is starting up or unreachable. Try again in a few seconds.",
   piston_error: "Code execution server returned an error.",
+  piston_rejected: "Code execution server rejected the request.",
+  piston_invalid_response:
+    "Code execution server returned an unexpected response.",
   rate_limited: "You're running code too fast.",
   timeout: "Request timed out before the server responded.",
   invalid_request: "Invalid request payload.",
