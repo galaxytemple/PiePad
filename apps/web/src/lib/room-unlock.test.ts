@@ -11,7 +11,10 @@ vi.mock("next/headers", () => ({
     get: (name: string) => cookieStore.get(name),
     set: (name: string, value: string) =>
       cookieStore.set(name, { value }),
-    delete: (name: string) => {
+    // Next.js's cookies().delete accepts a string or an options object —
+    // mirror both so we can assert the path-aware delete.
+    delete: (arg: string | { name: string; path?: string }) => {
+      const name = typeof arg === "string" ? arg : arg.name;
       cookieStore.delete(name);
     },
   }),

@@ -63,7 +63,10 @@ export async function setRoomUnlockCookie(
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     maxAge: TTL_SECONDS,
-    path: `/pad/${roomId}`,
+    // Path "/" so the cookie travels with both /pad/<roomId> (page render)
+    // and /yjs/<roomId> (WebSocket upgrade). The HMAC is keyed on roomId
+    // so cross-room leakage is moot.
+    path: "/",
   });
 }
 
@@ -85,5 +88,6 @@ export async function isRoomUnlocked(
 
 export async function clearRoomUnlockCookie(roomId: string): Promise<void> {
   const store = await cookies();
-  store.delete(`${COOKIE_PREFIX}${roomId}`);
+  // Match the path the cookie was set with so the browser actually drops it.
+  store.delete({ name: `${COOKIE_PREFIX}${roomId}`, path: "/" });
 }

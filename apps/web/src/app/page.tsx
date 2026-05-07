@@ -1,4 +1,5 @@
 import { auth, signOut } from "@/auth";
+import { BfcacheRefresh } from "@/components/BfcacheRefresh";
 import { CreatePadButton } from "@/components/CreatePadButton";
 import { LockIcon } from "@/components/icons";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -52,6 +53,7 @@ export default async function HomePage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      <BfcacheRefresh />
       <header className="flex items-center justify-between border-b border-divider bg-content1 px-6 py-3">
         <Link href="/" className="flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
