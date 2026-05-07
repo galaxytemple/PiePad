@@ -26,8 +26,11 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
           provider: account?.provider ?? "google",
           providerSubject: account?.providerAccountId ?? user.email,
         });
-        // Stash the DB id on the user object so the jwt() callback can pick it
-        // up — `user` is only present on initial sign-in.
+        // Auth.js v5 only exposes the `user` object inside the signIn
+        // callback — there's no documented return-value handoff to `jwt`.
+        // Stashing fields on `user` is the standard upstream-recommended
+        // pattern; the project's "no mutation" rule is intentionally
+        // bypassed here, scoped to this single call site.
         (user as { dbUserId?: number }).dbUserId = dbUser.id;
         (user as { dbNickname?: string | null }).dbNickname = dbUser.nickname;
       } catch (err) {

@@ -4,6 +4,7 @@ import { ensureRoom, getLatestSnapshot, saveSnapshot } from "@piepad/db";
 import type { Persistence } from "y-websocket/bin/utils";
 import type * as YType from "yjs";
 import type * as YLeveldbType from "y-leveldb";
+import { EMPTY_STATE_BYTES } from "./constants.js";
 
 // y-websocket/bin/utils is CJS. y-leveldb is dual-package (its ESM entry
 // imports yjs as ESM, yielding a second module instance that breaks Yjs's
@@ -61,10 +62,6 @@ async function hydrateFromOracle(
     return false;
   }
 }
-
-// Y.encodeStateAsUpdate of an empty Y.Doc returns a 2-byte sentinel; anything
-// larger means the doc actually has content.
-const EMPTY_STATE_BYTES = 2;
 
 export const persistence: Persistence = {
   provider: ldb,

@@ -6,6 +6,7 @@ import {
 } from "@piepad/db";
 import { docs } from "y-websocket/bin/utils";
 import type * as YType from "yjs";
+import { EMPTY_STATE_BYTES } from "./constants.js";
 import {
   clearDirty,
   flushLeveldbDoc,
@@ -24,9 +25,6 @@ const BACKOFF_MAX_MS = 10 * 60_000; // 10 minutes
 const JITTER_RATIO = 0.3;
 
 let timer: NodeJS.Timeout | null = null;
-
-// Y.encodeStateAsUpdate of an empty Y.Doc returns a 2-byte sentinel.
-const EMPTY_STATE_BYTES = 2;
 
 // Per-room exponential-backoff bookkeeping. Cleared on successful save or when
 // the doc has been evicted/snapshot-skipped.

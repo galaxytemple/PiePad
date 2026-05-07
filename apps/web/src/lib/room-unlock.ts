@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 const COOKIE_PREFIX = "pad_unlock_";
 const TTL_SECONDS = 60 * 60 * 24; // 24h
@@ -12,8 +12,28 @@ function getSecret(): string {
   return s;
 }
 
-function makeToken(roomId: string, userId: number, expiresAt: number): string {
-  const payload = `${roomId}.${userId}.${expiresAt}`;
+// First 16 hex chars (8 bytes, 64 bits) of SHA-256(UA) — enough to make a
+// stolen cookie useless to a different browser without bloating the cookie.
+function hashUserAgent(ua: string): string {
+  return crypto
+    .createHash("sha256")
+    .update(ua)
+    .digest("hex")
+    .slice(0, 16);
+}
+
+async function getRequestUaHash(): Promise<string> {
+  const h = await headers();
+  return hashUserAgent(h.get("user-agent") ?? "");
+}
+
+function makeToken(
+  roomId: string,
+  userId: number,
+  expiresAt: number,
+  uaHash: string
+): string {
+  const payload = `${roomId}.${userId}.${expiresAt}.${uaHash}`;
   const hmac = crypto
     .createHmac("sha256", getSecret())
     .update(payload)
@@ -35,7 +55,8 @@ export async function setRoomUnlockCookie(
   userId: number
 ): Promise<void> {
   const expiresAt = Math.floor(Date.now() / 1000) + TTL_SECONDS;
-  const token = makeToken(roomId, userId, expiresAt);
+  const uaHash = await getRequestUaHash();
+  const token = makeToken(roomId, userId, expiresAt, uaHash);
   const store = await cookies();
   store.set(`${COOKIE_PREFIX}${roomId}`, token, {
     httpOnly: true,
@@ -57,7 +78,8 @@ export async function isRoomUnlocked(
   if (dot < 0) return false;
   const exp = Number(cookie.slice(0, dot));
   if (!Number.isFinite(exp) || exp * 1000 < Date.now()) return false;
-  const expected = makeToken(roomId, userId, exp);
+  const uaHash = await getRequestUaHash();
+  const expected = makeToken(roomId, userId, exp, uaHash);
   return constantTimeEqual(cookie, expected);
 }
 

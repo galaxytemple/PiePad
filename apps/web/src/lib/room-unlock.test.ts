@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-// Hoisted cookie jar so the mock factory and the tests share one map.
-const { cookieStore } = vi.hoisted(() => ({
+// Hoisted cookie jar + UA so the mock factory and the tests share one map.
+const { cookieStore, requestState } = vi.hoisted(() => ({
   cookieStore: new Map<string, { value: string }>(),
+  requestState: { userAgent: "test-ua/1.0" },
 }));
 
 vi.mock("next/headers", () => ({
@@ -14,6 +15,10 @@ vi.mock("next/headers", () => ({
       cookieStore.delete(name);
     },
   }),
+  headers: async () => ({
+    get: (name: string) =>
+      name.toLowerCase() === "user-agent" ? requestState.userAgent : null,
+  }),
 }));
 
 import {
@@ -24,6 +29,7 @@ import {
 
 beforeEach(() => {
   cookieStore.clear();
+  requestState.userAgent = "test-ua/1.0";
 });
 
 afterEach(() => {
@@ -80,6 +86,13 @@ describe("room-unlock cookie", () => {
   test("clearRoomUnlockCookie revokes access", async () => {
     await setRoomUnlockCookie("room1", 42);
     await clearRoomUnlockCookie("room1");
+    expect(await isRoomUnlocked("room1", 42)).toBe(false);
+  });
+
+  test("rejects token bound to a different user-agent", async () => {
+    requestState.userAgent = "browser-A/1.0";
+    await setRoomUnlockCookie("room1", 42);
+    requestState.userAgent = "browser-B/1.0";
     expect(await isRoomUnlocked("room1", 42)).toBe(false);
   });
 });

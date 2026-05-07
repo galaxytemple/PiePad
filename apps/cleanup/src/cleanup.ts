@@ -10,6 +10,11 @@ function getInternalSecret(): string {
   return s;
 }
 
+// Without a timeout a hung ws process would block the cleanup tick on a
+// single fetch until the OS TCP timeout (~2 min). Fail fast and let the next
+// run retry; the LevelDB orphan is benign.
+const EVICT_TIMEOUT_MS = 5_000;
+
 async function evictFromWs(roomId: string): Promise<void> {
   try {
     const res = await fetch(`${WS_INTERNAL_URL}/internal/evict`, {
@@ -19,6 +24,7 @@ async function evictFromWs(roomId: string): Promise<void> {
         "x-internal-secret": getInternalSecret(),
       },
       body: JSON.stringify({ roomId, reason: "30_DAY_INACTIVITY" }),
+      signal: AbortSignal.timeout(EVICT_TIMEOUT_MS),
     });
     if (!res.ok) {
       console.error(

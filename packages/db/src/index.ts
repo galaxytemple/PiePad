@@ -25,8 +25,10 @@ function resolveWalletDir(): string {
     const absolute = path.resolve(explicit);
     if (fs.existsSync(path.join(absolute, "cwallet.sso"))) return absolute;
   }
+  // Walk up from cwd looking for a sibling `wallet/` dir. Cap at 10 levels so
+  // a misconfigured host doesn't fs.existsSync its way to /.
   let dir = process.cwd();
-  while (true) {
+  for (let i = 0; i < 10; i++) {
     const candidate = path.join(dir, "wallet");
     if (fs.existsSync(path.join(candidate, "cwallet.sso"))) return candidate;
     const parent = path.dirname(dir);
@@ -440,10 +442,13 @@ export async function listExpiredRooms(
   return withConnection(async (conn) => {
     type Row = { ID: string; NAME: string; LAST_ACCESSED_AT: Date };
     const result = await conn.execute<Row>(
+      // ORDER BY id (after last_accessed_at) makes the slice deterministic —
+      // without it, ties on last_accessed_at + a row count exactly equal to
+      // the limit could leave the same rooms in the next run's queue.
       `SELECT id, name, last_accessed_at
          FROM rooms
         WHERE last_accessed_at < SYSTIMESTAMP - INTERVAL '${safeDays}' DAY
-        ORDER BY last_accessed_at ASC
+        ORDER BY last_accessed_at ASC, id ASC
         FETCH FIRST ${safeLimit} ROWS ONLY`,
       {},
       { outFormat: oracledb.OUT_FORMAT_OBJECT }

@@ -10,6 +10,8 @@ function getSecret(): string {
   return s;
 }
 
+const EVICT_TIMEOUT_MS = 5_000;
+
 export async function evictRoomFromWs(
   roomId: string,
   reason: string
@@ -22,6 +24,7 @@ export async function evictRoomFromWs(
         "x-internal-secret": getSecret(),
       },
       body: JSON.stringify({ roomId, reason }),
+      signal: AbortSignal.timeout(EVICT_TIMEOUT_MS),
     });
   } catch (err) {
     // Best-effort: ws may be down, snapshot worker (or next reconnect)

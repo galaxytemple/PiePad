@@ -82,19 +82,28 @@ function timingSafeStringEqual(a: string, b: string): boolean {
   }
 }
 
+function hashUserAgent(ua: string): string {
+  return crypto
+    .createHash("sha256")
+    .update(ua)
+    .digest("hex")
+    .slice(0, 16);
+}
+
 // Mirror of apps/web/src/lib/room-unlock.ts: cookie value is
-// `<exp>.<hmac_sha256(roomId.userId.exp)>` keyed on AUTH_SECRET.
+// `<exp>.<hmac_sha256(roomId.userId.exp.uaHash)>` keyed on AUTH_SECRET.
 function isUnlockCookieValid(
   cookieValue: string | undefined,
   roomId: string,
-  userId: number
+  userId: number,
+  uaHash: string
 ): boolean {
   if (!cookieValue) return false;
   const dot = cookieValue.indexOf(".");
   if (dot < 0) return false;
   const exp = Number(cookieValue.slice(0, dot));
   if (!Number.isFinite(exp) || exp * 1000 < Date.now()) return false;
-  const payload = `${roomId}.${userId}.${exp}`;
+  const payload = `${roomId}.${userId}.${exp}.${uaHash}`;
   const expectedHmac = crypto
     .createHmac("sha256", AUTH_SECRET)
     .update(payload)
@@ -132,7 +141,10 @@ export async function authorizeUpgrade(
 
   if (needsUnlock) {
     const unlockCookie = cookies[`pad_unlock_${roomId}`];
-    if (!isUnlockCookieValid(unlockCookie, roomId, session.userId)) {
+    const ua = req.headers["user-agent"];
+    const uaString = typeof ua === "string" ? ua : (ua?.[0] ?? "");
+    const uaHash = hashUserAgent(uaString);
+    if (!isUnlockCookieValid(unlockCookie, roomId, session.userId, uaHash)) {
       return { ok: false, reason: "room_locked" };
     }
   }
