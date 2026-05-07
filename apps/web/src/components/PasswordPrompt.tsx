@@ -1,4 +1,5 @@
 import { unlockRoomAction } from "@/app/actions/rooms";
+import { LockIcon } from "@/components/icons";
 import { Button, Card, Input } from "@heroui/react";
 import Link from "next/link";
 
@@ -14,7 +15,7 @@ export function PasswordPrompt({ roomId, roomName, showError }: Props) {
       <Card className="w-full max-w-sm">
         <Card.Header className="flex flex-col items-start gap-1">
           <div className="flex items-center gap-2 text-default-500">
-            <span aria-hidden>🔒</span>
+            <LockIcon />
             <span className="text-sm">Password required</span>
           </div>
           <h1 className="truncate text-xl font-semibold">{roomName}</h1>

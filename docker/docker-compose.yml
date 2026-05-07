@@ -24,9 +24,14 @@ services:
       - caddy_config:/config
     environment:
       PUBLIC_HOST: "${PUBLIC_HOST}"
+    # Wait for web AND ws to actually be healthy (not just started) so the
+    # first request after a deploy doesn't 502 mid-Oracle-pool-init.
     depends_on:
-      - web
-      - ws
+      web:
+        condition: service_healthy
+      ws:
+        condition: service_healthy
+    mem_limit: 128m
 
   web:
     build:
@@ -46,7 +51,18 @@ services:
     volumes:
       - ../wallet:/wallet:ro
     depends_on:
-      - ws
+      ws:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    # 1GB ARM box; Next.js standalone runtime sits comfortably under 384MB
+    # even at peak. mem_limit makes OOM-killer behaviour deterministic
+    # instead of letting it pick at random across containers.
+    mem_limit: 384m
 
   ws:
     build:
@@ -61,6 +77,13 @@ services:
     volumes:
       - ../wallet:/wallet:ro
       - ws_data:/data/yjs
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:1234/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    mem_limit: 256m
 
   cleanup:
     build:
@@ -75,7 +98,17 @@ services:
     volumes:
       - ../wallet:/wallet:ro
     depends_on:
-      - ws
+      ws:
+        condition: service_healthy
+    # Just a node-cron worker; no HTTP endpoint to probe. Process-liveness
+    # check via a tiny no-op exec.
+    healthcheck:
+      test: ["CMD-SHELL", "node -e 'process.exit(0)'"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    mem_limit: 128m
 
   flyway:
     image: flyway/flyway:10-alpine
@@ -126,6 +159,7 @@ services:
     # configuration the upstream piston compose ships with.
     tmpfs:
       - /piston/jobs:exec,uid=1000,gid=1000,mode=711
+    mem_limit: 384m
 
 volumes:
   caddy_data:

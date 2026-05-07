@@ -1,5 +1,6 @@
 import { auth, signOut } from "@/auth";
 import { CreatePadButton } from "@/components/CreatePadButton";
+import { LockIcon } from "@/components/icons";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { timeAgo } from "@/lib/relative-time";
 import {
@@ -144,9 +145,7 @@ function RoomColumn({
                 >
                   <span className="flex min-w-0 items-center gap-2">
                     {r.hasPassword ? (
-                      <span title="Password protected" aria-label="locked">
-                        🔒
-                      </span>
+                      <LockIcon label="Password protected" />
                     ) : null}
                     <span className="truncate text-sm font-medium">
                       {r.name}

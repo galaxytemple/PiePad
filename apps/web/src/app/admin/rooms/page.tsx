@@ -1,4 +1,5 @@
 import { adminDeleteRoomAction } from "@/app/actions/rooms";
+import { LockIcon } from "@/components/icons";
 import { timeAgo } from "@/lib/relative-time";
 import { listAllRooms } from "@piepad/db";
 import { Button, Card } from "@heroui/react";
@@ -30,7 +31,7 @@ export default async function AdminRoomsPage() {
               <tr key={r.id}>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    {r.hasPassword ? <span aria-hidden>🔒</span> : null}
+                    {r.hasPassword ? <LockIcon /> : null}
                     <Link
                       href={`/pad/${r.id}`}
                       className="font-medium hover:underline"

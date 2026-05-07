@@ -1,6 +1,7 @@
 "use client";
 
 import { useTheme } from "next-themes";
+import { MoonIcon, SunIcon } from "./icons";
 
 // CSS-only icon driven by the .dark class on <html>: always reflects the
 // actually applied theme even when next-themes' hook value is briefly
@@ -25,12 +26,8 @@ export function ThemeToggle() {
       aria-label="Toggle theme"
       className="grid h-8 w-8 cursor-pointer place-items-center rounded-full border border-divider bg-content1 text-base transition-colors hover:bg-content2"
     >
-      <span className="dark:hidden" aria-hidden>
-        ☀️
-      </span>
-      <span className="hidden dark:inline" aria-hidden>
-        🌙
-      </span>
+      <SunIcon className="dark:hidden" />
+      <MoonIcon className="hidden dark:inline" />
     </button>
   );
 }
