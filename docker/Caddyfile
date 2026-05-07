@@ -3,6 +3,23 @@
 {$PUBLIC_HOST} {
     encode gzip zstd
 
+    # Security headers applied to every response on this site (web + ws upgrade).
+    # CSP is permissive on script/style because Monaco editor evaluates worker
+    # source and emits inline styles; tightening either of those breaks the
+    # editor entirely. The other headers are pure restrictors with no app cost.
+    header {
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' wss: https:; frame-ancestors 'none'; form-action 'self' https://accounts.google.com; base-uri 'self'; object-src 'none'; upgrade-insecure-requests"
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+        # Caddy's automatic HTTPS already issues HSTS via the TLS layer; we
+        # set it explicitly so the value is auditable here.
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        # Don't leak the upstream server software / version.
+        -Server
+    }
+
     # y-websocket: client connects to wss://host/yjs/<roomId> — strip /yjs
     # so setupWSConnection sees /<roomId> and matches its docs map by room.
     handle_path /yjs/* {

@@ -5,8 +5,15 @@ export const proxy = auth((req) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
   const isLoginPage = nextUrl.pathname === "/login";
+  // /api/auth is excluded by the matcher below; everything else under /api is
+  // a fetch target that should never receive an HTML 302 → /login (the fetch
+  // can't follow into a sign-in page and the caller sees a useless redirect).
+  const isApi = nextUrl.pathname.startsWith("/api/");
 
   if (!isLoggedIn && !isLoginPage) {
+    if (isApi) {
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
     const url = new URL("/login", nextUrl);
     if (nextUrl.pathname !== "/") {
       url.searchParams.set("callbackUrl", nextUrl.pathname + nextUrl.search);
