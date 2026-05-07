@@ -7,27 +7,22 @@ import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MonacoBinding } from "y-monaco";
-import { WebsocketProvider } from "y-websocket";
-import * as Y from "yjs";
-import { DEFAULT_LANGUAGE_ID, findLanguage, LANGUAGES } from "@/lib/languages";
+import { findLanguage, LANGUAGES } from "@/lib/languages";
+import { LockIcon } from "@/components/icons";
+import { RemoteCursorStyles } from "@/components/pad/RemoteCursorStyles";
+import { RunOutput } from "@/components/pad/RunOutput";
+import {
+  type AwarenessUser,
+  colorFor,
+  type RunError,
+  type RunResult,
+} from "@/components/pad/types";
+import { useRoomStatusPolling } from "@/components/pad/useRoomStatusPolling";
+import { useYjsEditor } from "@/components/pad/useYjsEditor";
 import { RoomSettings } from "@/components/RoomSettings";
 import { Stopwatch } from "@/components/Stopwatch";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:1234";
-
-const PALETTE = [
-  "#ef4444",
-  "#f97316",
-  "#eab308",
-  "#22c55e",
-  "#06b6d4",
-  "#3b82f6",
-  "#a855f7",
-  "#ec4899",
-] as const;
-
-type AwarenessUser = { name: string; color: string; avatarUrl: string | null };
 type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
 const STATUS_STYLES: Record<ConnectionStatus, string> = {
@@ -35,48 +30,6 @@ const STATUS_STYLES: Record<ConnectionStatus, string> = {
   connected: "bg-green-100 text-green-700",
   disconnected: "bg-red-100 text-red-700",
 };
-
-interface RunResult {
-  stdout: string;
-  stderr: string;
-  code: number | null;
-  signal: string | null;
-  compileStderr: string | null;
-  durationMs: number;
-}
-
-interface RunError {
-  error: string;
-  message?: string;
-  retryAfterSec?: number;
-}
-
-function pickRandom<T>(items: readonly T[]): T {
-  const idx = Math.floor(Math.random() * items.length);
-  return items[idx] as T;
-}
-
-// Pick a printable single-letter initial from a display name. Whitespace,
-// punctuation, and emoji-only names fall back to "?". JSON.stringify in
-// the caller takes care of CSS escaping.
-function pickInitial(name: string | undefined | null): string {
-  if (!name) return "?";
-  for (const ch of name.trim()) {
-    if (/^[\p{L}\p{N}]$/u.test(ch)) return ch.toUpperCase();
-  }
-  return "?";
-}
-
-// Stable color per logged-in identity so my pill colour does not flicker
-// across reconnects within the same tab. Hash the name into the palette.
-function colorFor(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = (hash * 31 + name.charCodeAt(i)) | 0;
-  }
-  const idx = Math.abs(hash) % PALETTE.length;
-  return PALETTE[idx] as string;
-}
 
 interface PadEditorInnerProps {
   roomId: string;
@@ -86,11 +39,6 @@ interface PadEditorInnerProps {
   user: { name: string; avatarUrl: string | null };
 }
 
-interface DeletedNotice {
-  reason?: string;
-  at?: number;
-}
-
 export function PadEditorInner({
   roomId,
   roomName,
@@ -98,13 +46,9 @@ export function PadEditorInner({
   isOwner,
   user: viewer,
 }: PadEditorInnerProps) {
-  const [status, setStatus] = useState<ConnectionStatus>("connecting");
-  const [users, setUsers] = useState<AwarenessUser[]>([]);
-  const [languageId, setLanguageId] = useState<string>(DEFAULT_LANGUAGE_ID);
   const [argsText, setArgsText] = useState<string>("");
   const [running, setRunning] = useState<boolean>(false);
   const [output, setOutput] = useState<RunResult | RunError | null>(null);
-  const [deleted, setDeleted] = useState<DeletedNotice | null>(null);
 
   const { resolvedTheme } = useTheme();
   const monacoTheme = resolvedTheme === "light" ? "vs" : "vs-dark";
@@ -117,145 +61,29 @@ export function PadEditorInner({
     }),
     [viewer.name, viewer.avatarUrl]
   );
-  const ydocRef = useRef<Y.Doc | null>(null);
-  const providerRef = useRef<WebsocketProvider | null>(null);
-  const bindingRef = useRef<MonacoBinding | null>(null);
-  const metaRef = useRef<Y.Map<unknown> | null>(null);
+
+  const {
+    ydocRef,
+    providerRef,
+    status,
+    users,
+    languageId,
+    setLanguageId,
+    deleted,
+    setDeleted,
+  } = useYjsEditor({ roomId, localUser });
+
+  useRoomStatusPolling(roomId, deleted, setDeleted);
 
   const language = findLanguage(languageId);
 
+  const bindingRef = useRef<MonacoBinding | null>(null);
   useEffect(() => {
-    const ydoc = new Y.Doc();
-    const provider = new WebsocketProvider(WS_URL, roomId, ydoc);
-    provider.awareness.setLocalStateField("user", localUser);
-
-    const meta = ydoc.getMap("meta");
-    metaRef.current = meta;
-
-    const handleStatus = (event: { status: ConnectionStatus }) => {
-      setStatus(event.status);
-    };
-
-    const refreshUsers = () => {
-      const list: AwarenessUser[] = [];
-      for (const state of provider.awareness.getStates().values()) {
-        const candidate = (state as { user?: Partial<AwarenessUser> }).user;
-        if (
-          candidate &&
-          typeof candidate.name === "string" &&
-          typeof candidate.color === "string"
-        ) {
-          list.push({
-            name: candidate.name,
-            color: candidate.color,
-            avatarUrl:
-              typeof candidate.avatarUrl === "string"
-                ? candidate.avatarUrl
-                : null,
-          });
-        }
-      }
-      setUsers(list);
-    };
-
-    const syncMetaFromYjs = () => {
-      const lang = meta.get("language");
-      if (typeof lang === "string") setLanguageId(lang);
-      const del = meta.get("deleted");
-      if (del && typeof del === "object") {
-        setDeleted(del as DeletedNotice);
-      }
-    };
-
-    provider.on("status", handleStatus);
-    provider.awareness.on("change", refreshUsers);
-    meta.observe(syncMetaFromYjs);
-
-    refreshUsers();
-    syncMetaFromYjs();
-
-    ydocRef.current = ydoc;
-    providerRef.current = provider;
-
     return () => {
       bindingRef.current?.destroy();
       bindingRef.current = null;
-      meta.unobserve(syncMetaFromYjs);
-      provider.awareness.off("change", refreshUsers);
-      provider.off("status", handleStatus);
-      provider.destroy();
-      ydoc.destroy();
-      ydocRef.current = null;
-      providerRef.current = null;
-      metaRef.current = null;
     };
-  }, [roomId, localUser]);
-
-  // y-monaco wires up decoration classes (.yRemoteSelection-<clientID>,
-  // .yRemoteSelectionHead-<clientID>) but ships no CSS. Inject per-client
-  // colour rules off the awareness state so each remote caret + selection
-  // takes that user's pill colour. globals.css covers the base shape.
-  useEffect(() => {
-    const provider = providerRef.current;
-    if (!provider) return;
-    const styleEl = document.createElement("style");
-    styleEl.dataset.pad = roomId;
-    document.head.appendChild(styleEl);
-
-    const update = () => {
-      const localId = provider.awareness.clientID;
-      const blocks: string[] = [];
-      for (const [clientId, state] of provider.awareness.getStates()) {
-        if (clientId === localId) continue;
-        const u = (state as { user?: { name?: string; color?: string } }).user;
-        const color = typeof u?.color === "string" ? u.color : "#888";
-        const initial = pickInitial(u?.name);
-        blocks.push(
-          `.yRemoteSelection-${clientId} { background-color: ${color}55; }
-           .yRemoteSelectionHead-${clientId} { border-left-color: ${color}; }
-           .yRemoteSelectionHead-${clientId}::after {
-             background: ${color};
-             content: ${JSON.stringify(initial)};
-           }`
-        );
-      }
-      styleEl.textContent = blocks.join("\n");
-    };
-
-    provider.awareness.on("change", update);
-    update();
-    return () => {
-      provider.awareness.off("change", update);
-      styleEl.remove();
-    };
-  }, [roomId]);
-
-  // Belt-and-suspenders: also poll room status. The Yjs meta.deleted
-  // broadcast is the fast path, but a network blip during the broadcast
-  // (or a ws restart) could swallow it. Both paths converge on setDeleted.
-  useEffect(() => {
-    if (deleted) return;
-    let cancelled = false;
-    const check = async () => {
-      try {
-        const res = await fetch(`/api/rooms/${roomId}/status`, {
-          cache: "no-store",
-        });
-        if (cancelled) return;
-        if (res.status === 404) {
-          setDeleted({ reason: "not_found", at: Date.now() });
-          return;
-        }
-      } catch {
-        // network blip — try again on next tick
-      }
-    };
-    const id = setInterval(check, 15_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [roomId, deleted]);
+  }, []);
 
   const handleEditorMount = (instance: editor.IStandaloneCodeEditor) => {
     const ydoc = ydocRef.current;
@@ -271,10 +99,6 @@ export function PadEditorInner({
       provider.awareness
     );
   };
-
-  const updateLanguage = useCallback((id: string) => {
-    metaRef.current?.set("language", id);
-  }, []);
 
   const runCode = useCallback(async () => {
     if (!language.piston) return;
@@ -314,10 +138,11 @@ export function PadEditorInner({
     } finally {
       setRunning(false);
     }
-  }, [language, argsText]);
+  }, [language, argsText, ydocRef]);
 
   return (
     <div className="flex h-screen flex-col">
+      <RemoteCursorStyles provider={providerRef.current} roomId={roomId} />
       <header className="flex items-center justify-between border-b border-divider bg-content1 px-6 py-3">
         <div className="flex items-center gap-3">
           <Link
@@ -329,9 +154,7 @@ export function PadEditorInner({
           </Link>
           <span className="flex items-center gap-1 text-sm font-medium">
             {hasPassword ? (
-              <span title="Private — password required" aria-label="locked">
-                🔒
-              </span>
+              <LockIcon label="Private — password required" />
             ) : null}
             {roomName}
           </span>
@@ -355,7 +178,7 @@ export function PadEditorInner({
           </span>
           <select
             value={languageId}
-            onChange={(e) => updateLanguage(e.target.value)}
+            onChange={(e) => setLanguageId(e.target.value)}
             className="rounded border border-divider bg-content1 px-2 py-1 text-sm"
             aria-label="Language"
           >
@@ -370,9 +193,9 @@ export function PadEditorInner({
           <ThemeToggle />
         </div>
         <div className="flex items-center gap-3">
-          {users.map((u, i) => (
+          {users.map(({ clientId, user: u }) => (
             <span
-              key={`${u.name}-${i}`}
+              key={clientId}
               className="flex items-center gap-1.5 text-sm"
             >
               {u.avatarUrl ? (
@@ -461,80 +284,7 @@ export function PadEditorInner({
         </div>
       </div>
 
-      <OutputPanel result={output} />
-    </div>
-  );
-}
-
-function OutputPanel({ result }: { result: RunResult | RunError | null }) {
-  if (!result) {
-    return (
-      <div className="h-40 overflow-auto border-t border-zinc-200 bg-zinc-950 px-4 py-2 font-mono text-xs text-zinc-500 dark:border-zinc-800">
-        (no output yet — press Run)
-      </div>
-    );
-  }
-  if ("error" in result) {
-    return <ErrorPanel result={result} />;
-  }
-  return (
-    <div className="h-40 overflow-auto border-t border-zinc-200 bg-zinc-950 px-4 py-2 font-mono text-xs dark:border-zinc-800">
-      <div className="mb-1 text-zinc-500">
-        exit {result.code}
-        {result.signal ? ` (signal ${result.signal})` : ""} · {result.durationMs}ms
-      </div>
-      {result.compileStderr ? (
-        <pre className="whitespace-pre-wrap text-amber-400">{result.compileStderr}</pre>
-      ) : null}
-      {result.stdout ? (
-        <pre className="whitespace-pre-wrap text-zinc-100">{result.stdout}</pre>
-      ) : null}
-      {result.stderr ? (
-        <pre className="whitespace-pre-wrap text-red-400">{result.stderr}</pre>
-      ) : null}
-      {!result.stdout && !result.stderr && !result.compileStderr ? (
-        <span className="text-zinc-500">(no output)</span>
-      ) : null}
-    </div>
-  );
-}
-
-const FRIENDLY_ERROR_MESSAGES: Record<string, string> = {
-  piston_unreachable:
-    "Code execution server is starting up or unreachable. Try again in a few seconds.",
-  piston_error: "Code execution server returned an error.",
-  piston_rejected: "Code execution server rejected the request.",
-  piston_invalid_response:
-    "Code execution server returned an unexpected response.",
-  rate_limited: "You're running code too fast.",
-  timeout: "Request timed out before the server responded.",
-  invalid_request: "Invalid request payload.",
-  invalid_json: "Invalid request body.",
-  client_error: "Could not reach the API.",
-};
-
-function ErrorPanel({ result }: { result: RunError }) {
-  const friendly =
-    FRIENDLY_ERROR_MESSAGES[result.error] ?? "Something went wrong.";
-  const isWarmup = result.error === "piston_unreachable";
-  return (
-    <div className="h-40 overflow-auto border-t border-zinc-200 bg-zinc-950 px-4 py-2 font-mono text-xs dark:border-zinc-800">
-      <div
-        className={`font-semibold ${isWarmup ? "text-amber-300" : "text-red-400"}`}
-      >
-        {friendly}
-      </div>
-      {result.retryAfterSec !== undefined ? (
-        <div className="text-zinc-400">
-          Retry in {result.retryAfterSec}s.
-        </div>
-      ) : null}
-      {result.message ? (
-        <div className="mt-1 text-zinc-500">{result.message}</div>
-      ) : null}
-      <div className="mt-1 text-[10px] text-zinc-600">
-        ({result.error})
-      </div>
+      <RunOutput result={output} />
     </div>
   );
 }
