@@ -97,6 +97,11 @@ jobs:
           # call throws — which on /login produces a bare 302 → / and
           # creates a redirect loop with the proxy.ts middleware.
           AUTH_TRUST_HOST=true
+          # Canonical public URL used to build OAuth callback / error /
+          # signin redirect URLs. Without this, Auth.js falls back to the
+          # container's listen address (0.0.0.0:3000) when forwarded host
+          # parsing misses, which sends users to broken absolute URLs.
+          AUTH_URL=https://${{ secrets.PUBLIC_HOST }}
           ADMIN_EMAILS=${{ secrets.ADMIN_EMAILS }}
 
           NEXT_PUBLIC_WS_URL=wss://${{ secrets.PUBLIC_HOST }}/yjs
