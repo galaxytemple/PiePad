@@ -39,4 +39,4 @@ Thumbs.db
 .idea/
 *.swp
 
-script/create_vm.py
+script/
