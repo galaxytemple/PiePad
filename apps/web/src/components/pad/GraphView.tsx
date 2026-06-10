@@ -91,8 +91,8 @@ export function GraphView({ program }: { program: GraphProgram }) {
 
       {program.warnings.length > 0 ? (
         <div className="border-b border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          {program.warnings.map((w) => (
-            <div key={w}>⚠ {w}</div>
+          {program.warnings.map((w, i) => (
+            <div key={i}>⚠ {w}</div>
           ))}
         </div>
       ) : null}

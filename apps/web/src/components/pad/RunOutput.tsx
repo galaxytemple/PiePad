@@ -30,34 +30,32 @@ export function RunOutput({
   if ("error" in result) {
     return <ErrorPanel result={result} />;
   }
-  return (
-    <div className="h-40 overflow-auto border-t border-zinc-200 bg-zinc-950 px-4 py-2 font-mono text-xs dark:border-zinc-800">
-      <div className="mb-1 text-zinc-500">
-        exit {result.code}
-        {result.signal ? ` (signal ${result.signal})` : ""} ·{" "}
-        {result.durationMs}ms
-      </div>
-      {result.compileStderr ? (
-        <pre className="whitespace-pre-wrap text-amber-400">
-          {result.compileStderr}
-        </pre>
-      ) : null}
-      {(() => {
-        const visibleStdout = stripGraphDirectives(result.stdout);
-        return visibleStdout ? (
-          <pre className="whitespace-pre-wrap text-zinc-100">
-            {visibleStdout}
+  {
+    const visibleStdout = stripGraphDirectives(result.stdout);
+    return (
+      <div className="h-40 overflow-auto border-t border-zinc-200 bg-zinc-950 px-4 py-2 font-mono text-xs dark:border-zinc-800">
+        <div className="mb-1 text-zinc-500">
+          exit {result.code}
+          {result.signal ? ` (signal ${result.signal})` : ""} ·{" "}
+          {result.durationMs}ms
+        </div>
+        {result.compileStderr ? (
+          <pre className="whitespace-pre-wrap text-amber-400">
+            {result.compileStderr}
           </pre>
-        ) : null;
-      })()}
-      {result.stderr ? (
-        <pre className="whitespace-pre-wrap text-red-400">{result.stderr}</pre>
-      ) : null}
-      {!result.stdout && !result.stderr && !result.compileStderr ? (
-        <span className="text-zinc-500">(no output)</span>
-      ) : null}
-    </div>
-  );
+        ) : null}
+        {visibleStdout ? (
+          <pre className="whitespace-pre-wrap text-zinc-100">{visibleStdout}</pre>
+        ) : null}
+        {result.stderr ? (
+          <pre className="whitespace-pre-wrap text-red-400">{result.stderr}</pre>
+        ) : null}
+        {!visibleStdout && !result.stderr && !result.compileStderr ? (
+          <span className="text-zinc-500">(no output)</span>
+        ) : null}
+      </div>
+    );
+  }
 }
 
 function ErrorPanel({ result }: { result: RunError }) {

@@ -1,3 +1,5 @@
+"use client";
+
 import cytoscape, { type Core, type ElementDefinition } from "cytoscape";
 import { useEffect, useRef } from "react";
 import type { SingleGraphState } from "./graph-types";
@@ -97,13 +99,23 @@ export function useCytoscapeGraph(
   const structureKeyRef = useRef<string>("");
 
   useEffect(() => {
+    const container = containerRef.current;
     // Guard: containerRef is null during SSR/first render before the div is
     // attached. The cleanup re-runs on Strict Mode remount and recreates cy.
-    if (!containerRef.current) return;
-    const cy = cytoscape({ container: containerRef.current, elements: [] });
+    if (!container) return;
+    const cy = cytoscape({ container, elements: [] });
     cyRef.current = cy;
     structureKeyRef.current = "";
+    // Re-fit when the container resizes (e.g. the panel is expanded after
+    // having been collapsed to zero width, or the window resizes), otherwise
+    // a graph laid out in a 0x0 viewport stays blank.
+    const observer = new ResizeObserver(() => {
+      cy.resize();
+      cy.fit(undefined, 12);
+    });
+    observer.observe(container);
     return () => {
+      observer.disconnect();
       cy.destroy();
       cyRef.current = null;
     };
