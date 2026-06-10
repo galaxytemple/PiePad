@@ -184,3 +184,46 @@ describe("stripGraphDirectives", () => {
     expect(stripGraphDirectives("graphing is fun")).toBe("graphing is fun");
   });
 });
+
+describe("invalid input is ignored (no step consumed)", () => {
+  it("ignores malformed JSON in graph: payload", () => {
+    const p = parseGraphProgram("graph: [not json");
+    expect(p.stepCount).toBe(0);
+  });
+
+  it("ignores non-array graph: payload", () => {
+    const p = parseGraphProgram("graph: {}");
+    expect(p.stepCount).toBe(0);
+  });
+
+  it("ignores adjacency with a non-array row", () => {
+    const p = parseGraphProgram("graph: [1,[0]]");
+    expect(p.stepCount).toBe(0);
+  });
+
+  it("ignores adjacency with a non-integer neighbor", () => {
+    const p = parseGraphProgram("graph: [[1.5],[0]]");
+    expect(p.stepCount).toBe(0);
+  });
+
+  it("ignores a neighbor index out of range", () => {
+    const p = parseGraphProgram("graph: [[9],[0]]");
+    expect(p.stepCount).toBe(0);
+  });
+
+  it("ignores graph_edge before any graph: for that id", () => {
+    const p = parseGraphProgram("graph_edge:0:1:label:x\ngraph: [[1],[0]]");
+    expect(p.stepCount).toBe(1);
+    expect(p.events[0].kind).toBe("graph");
+  });
+
+  it("ignores an unknown node attribute", () => {
+    const p = parseGraphProgram("graph: [[1],[0]]\ngraph_node:0:tooltip:hi");
+    expect(p.stepCount).toBe(1);
+  });
+
+  it("ignores an unknown edge attribute", () => {
+    const p = parseGraphProgram("graph: [[1],[0]]\ngraph_edge:0:1:weightx:5");
+    expect(p.stepCount).toBe(1);
+  });
+});
