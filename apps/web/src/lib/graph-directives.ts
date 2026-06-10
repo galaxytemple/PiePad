@@ -110,6 +110,32 @@ function parseNodeLine(
   return null;
 }
 
+function parseEdgeLine(
+  id: string,
+  body: string,
+  structures: Map<string, number[][]>
+): GraphEvent | null {
+  const adj = structures.get(id);
+  if (!adj) return null;
+  const parts = splitMax(body, ":", 4); // [src, dst, attr, value]
+  if (parts.length < 4) return null;
+  const srcN = Number(parts[0]);
+  const dstN = Number(parts[1]);
+  if (!Number.isInteger(srcN) || !Number.isInteger(dstN)) return null;
+  if (srcN < 0 || dstN < 0 || srcN >= adj.length || dstN >= adj.length) return null;
+  const attr = parts[2];
+  const value = parts[3];
+  if (attr === "color") {
+    const c = Number(value.trim());
+    if (!Number.isInteger(c) || c < 1 || c > 16) return null;
+    return { kind: "edge", id, src: srcN, dst: dstN, attr: "color", value: PALETTE[c - 1]! };
+  }
+  if (attr === "label") {
+    return { kind: "edge", id, src: srcN, dst: dstN, attr: "label", value };
+  }
+  return null;
+}
+
 // `structures` is a local accumulator tracking each id's current adjacency so
 // node/edge directives can be range-validated against the graph in effect at
 // that point in the stream. Mutating it during this forward pass is local
@@ -130,7 +156,8 @@ function parseLine(
   const { kw, id } = parsed;
   if (kw === "graph") return parseGraphLine(id, body, structures, warnings);
   if (kw === "graph_node") return parseNodeLine(id, body, structures);
-  return null; // graph_edge added in a later task
+  if (kw === "graph_edge") return parseEdgeLine(id, body, structures);
+  return null;
 }
 
 export function parseGraphProgram(stdout: string): GraphProgram {
@@ -178,5 +205,9 @@ function applyEvent(state: MultiGraphState, ev: GraphEvent): void {
   if (!g) return; // validated unreachable, defensive
   if (ev.kind === "node") {
     g.nodes[ev.node] = { ...(g.nodes[ev.node] ?? {}), [ev.attr]: ev.value };
+  }
+  if (ev.kind === "edge") {
+    const key = `${ev.src}->${ev.dst}`;
+    g.edges[key] = { ...(g.edges[key] ?? {}), [ev.attr]: ev.value };
   }
 }

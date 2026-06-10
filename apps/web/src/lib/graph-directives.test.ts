@@ -95,3 +95,25 @@ describe("graph_node directives + frameAt", () => {
     expect(clampStep(0, 0)).toBe(0);
   });
 });
+
+describe("graph_edge directives", () => {
+  it("emits edge color (PALETTE hex) and label events keyed by src->dst", () => {
+    const p = parseGraphProgram(
+      ["graph: [[1],[0]]", "graph_edge:0:1:color:3", "graph_edge:0:1:label:w=5"].join("\n")
+    );
+    expect(p.stepCount).toBe(3);
+    expect(p.events[1]).toEqual({
+      kind: "edge", id: "main", src: 0, dst: 1, attr: "color", value: PALETTE[2],
+    });
+    const s = frameAt(p, 2);
+    expect(s.main.edges["0->1"]).toEqual({ color: PALETTE[2], label: "w=5" });
+  });
+
+  it("label may contain colons; ignores out-of-range endpoints", () => {
+    const p = parseGraphProgram(
+      ["graph: [[1],[0]]", "graph_edge:0:1:label:a:b", "graph_edge:9:0:color:1"].join("\n")
+    );
+    expect(p.stepCount).toBe(2);
+    expect(frameAt(p, 1).main.edges["0->1"]).toEqual({ label: "a:b" });
+  });
+});
