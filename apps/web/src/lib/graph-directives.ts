@@ -3,6 +3,8 @@ import type {
   GraphEvent,
   GraphMode,
   GraphProgram,
+  MultiGraphState,
+  SingleGraphState,
 } from "@/components/pad/graph-types";
 
 const ID_RE = /^[A-Za-z0-9_-]+$/;
@@ -84,6 +86,30 @@ function parseGraphLine(
   return { kind: "graph", id, mode, adjacency };
 }
 
+function parseNodeLine(
+  id: string,
+  body: string,
+  structures: Map<string, number[][]>
+): GraphEvent | null {
+  const adj = structures.get(id);
+  if (!adj) return null; // node before graph for this id
+  const parts = splitMax(body, ":", 3); // [node, attr, value]
+  if (parts.length < 3) return null;
+  const node = Number(parts[0]);
+  if (!Number.isInteger(node) || node < 0 || node >= adj.length) return null;
+  const attr = parts[1];
+  const value = parts[2];
+  if (attr === "color") {
+    const c = Number(value.trim());
+    if (!Number.isInteger(c) || c < 1 || c > 16) return null;
+    return { kind: "node", id, node, attr: "color", value: PALETTE[c - 1]! };
+  }
+  if (attr === "info") {
+    return { kind: "node", id, node, attr: "info", value };
+  }
+  return null;
+}
+
 // `structures` is a local accumulator tracking each id's current adjacency so
 // node/edge directives can be range-validated against the graph in effect at
 // that point in the stream. Mutating it during this forward pass is local
@@ -103,7 +129,8 @@ function parseLine(
   if (!parsed) return null;
   const { kw, id } = parsed;
   if (kw === "graph") return parseGraphLine(id, body, structures, warnings);
-  return null; // graph_node / graph_edge added in later tasks
+  if (kw === "graph_node") return parseNodeLine(id, body, structures);
+  return null; // graph_edge added in a later task
 }
 
 export function parseGraphProgram(stdout: string): GraphProgram {
@@ -115,4 +142,41 @@ export function parseGraphProgram(stdout: string): GraphProgram {
     if (ev) events.push(ev);
   }
   return { events, stepCount: events.length, warnings };
+}
+
+export function clampStep(index: number, stepCount: number): number {
+  if (stepCount <= 0) return 0;
+  if (index < 0) return 0;
+  if (index > stepCount - 1) return stepCount - 1;
+  return index;
+}
+
+// Fold events 0..index (inclusive) into an immutable multi-graph state.
+// `state` is a fresh local accumulator built per call, so mutating it while
+// folding is local construction — never touches caller-owned objects.
+export function frameAt(program: GraphProgram, index: number): MultiGraphState {
+  const last = clampStep(index, program.stepCount);
+  const state: MultiGraphState = {};
+  if (program.stepCount === 0) return state;
+  for (let k = 0; k <= last; k++) applyEvent(state, program.events[k]!);
+  return state;
+}
+
+function applyEvent(state: MultiGraphState, ev: GraphEvent): void {
+  if (ev.kind === "graph") {
+    // Replacing structure clears the id's decorations.
+    state[ev.id] = {
+      id: ev.id,
+      mode: ev.mode,
+      adjacency: ev.adjacency,
+      nodes: {},
+      edges: {},
+    } satisfies SingleGraphState;
+    return;
+  }
+  const g = state[ev.id];
+  if (!g) return; // validated unreachable, defensive
+  if (ev.kind === "node") {
+    g.nodes[ev.node] = { ...(g.nodes[ev.node] ?? {}), [ev.attr]: ev.value };
+  }
 }
