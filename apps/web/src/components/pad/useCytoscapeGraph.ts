@@ -42,11 +42,15 @@ function toElements(s: SingleGraphState): ElementDefinition[] {
   return [...nodes, ...edges];
 }
 
+const STYLE_CACHE = new Map<boolean, cytoscape.StylesheetStyle[]>();
+
 function buildStyle(isDark: boolean): cytoscape.StylesheetStyle[] {
+  const cached = STYLE_CACHE.get(isDark);
+  if (cached) return cached;
   const text = isDark ? "#e4e4e7" : "#18181b";
   const nodeBg = isDark ? "#3f3f46" : "#d4d4d8";
   const line = isDark ? "#71717a" : "#a1a1aa";
-  return [
+  const style: cytoscape.StylesheetStyle[] = [
     {
       selector: "node",
       style: {
@@ -76,6 +80,8 @@ function buildStyle(isDark: boolean): cytoscape.StylesheetStyle[] {
     },
     { selector: "edge.undirected", style: { "target-arrow-shape": "none" } },
   ];
+  STYLE_CACHE.set(isDark, style);
+  return style;
 }
 
 // Renders one graph into a container. Re-layout happens only when the graph's
@@ -91,6 +97,8 @@ export function useCytoscapeGraph(
   const structureKeyRef = useRef<string>("");
 
   useEffect(() => {
+    // Guard: containerRef is null during SSR/first render before the div is
+    // attached. The cleanup re-runs on Strict Mode remount and recreates cy.
     if (!containerRef.current) return;
     const cy = cytoscape({ container: containerRef.current, elements: [] });
     cyRef.current = cy;

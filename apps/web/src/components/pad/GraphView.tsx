@@ -40,32 +40,12 @@ export function GraphView({ program }: { program: GraphProgram }) {
   const isDark = resolvedTheme !== "light";
   const [layout, setLayout] = useState<LayoutName>("breadthfirst");
   const [showHelp, setShowHelp] = useState(false);
-
-  // Track rawStep alongside the last seen program so we can reset to the
-  // final step when the program identity changes — without an effect or
-  // ref reads during render.
-  const [stepState, setStepState] = useState<{
-    seenProgram: GraphProgram;
-    rawStep: number;
-  }>(() => ({ seenProgram: program, rawStep: program.stepCount - 1 }));
-
-  // When the program prop changes to a new object, reset the step to the
-  // final step via a derived-state update (no effect needed).
-  const rawStep =
-    stepState.seenProgram === program
-      ? stepState.rawStep
-      : program.stepCount - 1;
-  if (stepState.seenProgram !== program) {
-    setStepState({ seenProgram: program, rawStep: program.stepCount - 1 });
-  }
-
-  const setRawStep = (updater: number | ((prev: number) => number)) => {
-    setStepState((prev) => {
-      const next =
-        typeof updater === "function" ? updater(prev.rawStep) : updater;
-      return { seenProgram: prev.seenProgram, rawStep: next };
-    });
-  };
+  // Start at the final step so a user who ignores stepping sees the end result.
+  // The timeline is reset per run by the parent re-mounting this component with
+  // a key keyed on the run (so a fresh `program` gets a fresh initial step).
+  const [rawStep, setRawStep] = useState(() =>
+    Math.max(0, program.stepCount - 1)
+  );
 
   const step = clampStep(rawStep, program.stepCount);
   const state = useMemo(() => frameAt(program, step), [program, step]);
@@ -166,7 +146,7 @@ export function GraphView({ program }: { program: GraphProgram }) {
             value={step}
             onChange={(e) => setRawStep(Number(e.target.value))}
             className="flex-1"
-            aria-label="Step"
+            aria-label="Graph step"
           />
           <span className="font-mono text-[11px] text-default-500">
             step {step + 1}/{program.stepCount}
