@@ -117,3 +117,52 @@ describe("graph_edge directives", () => {
     expect(frameAt(p, 1).main.edges["0->1"]).toEqual({ label: "a:b" });
   });
 });
+
+describe("@id multi-graph + undirected", () => {
+  it("routes directives to named graphs and keeps default @main separate", () => {
+    const p = parseGraphProgram(
+      [
+        "graph: [[1],[0]]",
+        "graph@tree:undirected: [[1,2],[],[]]",
+        "graph_node@tree:0:color:1",
+        "graph_node:1:color:2",
+      ].join("\n")
+    );
+    const s = frameAt(p, p.stepCount - 1);
+    expect(Object.keys(s).sort()).toEqual(["main", "tree"]);
+    expect(s.tree.mode).toBe("undirected");
+    expect(s.tree.nodes[0]).toEqual({ color: PALETTE[0] });
+    expect(s.main.nodes[1]).toEqual({ color: PALETTE[1] });
+    expect(s.main.nodes[0]).toBeUndefined();
+  });
+
+  it("rejects invalid @id syntax", () => {
+    const p = parseGraphProgram("graph@bad id: [[]]");
+    expect(p.stepCount).toBe(0);
+  });
+
+  it("a second graph: for an id replaces structure and clears its decorations", () => {
+    const p = parseGraphProgram(
+      ["graph: [[1],[0]]", "graph_node:0:color:1", "graph: [[1,2],[],[]]"].join("\n")
+    );
+    const s = frameAt(p, p.stepCount - 1);
+    expect(s.main.adjacency).toEqual([[1, 2], [], []]);
+    expect(s.main.nodes).toEqual({});
+  });
+});
+
+describe("caps and warnings", () => {
+  it("rejects a graph over 500 nodes with a warning", () => {
+    const big = JSON.stringify(Array.from({ length: 501 }, () => []));
+    const p = parseGraphProgram(`graph: ${big}`);
+    expect(p.stepCount).toBe(0);
+    expect(p.warnings.some((w) => w.includes("max 500"))).toBe(true);
+  });
+
+  it("rejects more than 8 graphs with a warning", () => {
+    const lines = Array.from({ length: 9 }, (_, i) => `graph@g${i}: [[]]`);
+    const p = parseGraphProgram(lines.join("\n"));
+    expect(p.stepCount).toBe(8);
+    expect(p.warnings.some((w) => w.includes("more than 8 graphs"))).toBe(true);
+  });
+});
