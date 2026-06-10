@@ -1,3 +1,4 @@
+import { stripGraphDirectives } from "@/lib/graph-directives";
 import type { RunError, RunResult } from "./types";
 
 const FRIENDLY_ERROR_MESSAGES: Record<string, string> = {
@@ -41,9 +42,14 @@ export function RunOutput({
           {result.compileStderr}
         </pre>
       ) : null}
-      {result.stdout ? (
-        <pre className="whitespace-pre-wrap text-zinc-100">{result.stdout}</pre>
-      ) : null}
+      {(() => {
+        const visibleStdout = stripGraphDirectives(result.stdout);
+        return visibleStdout ? (
+          <pre className="whitespace-pre-wrap text-zinc-100">
+            {visibleStdout}
+          </pre>
+        ) : null;
+      })()}
       {result.stderr ? (
         <pre className="whitespace-pre-wrap text-red-400">{result.stderr}</pre>
       ) : null}

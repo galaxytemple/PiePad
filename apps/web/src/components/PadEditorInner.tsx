@@ -6,11 +6,14 @@ import type { editor } from "monaco-editor";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Group, Panel, Separator } from "react-resizable-panels";
 import { MonacoBinding } from "y-monaco";
 import { findLanguage, LANGUAGES } from "@/lib/languages";
 import { LockIcon } from "@/components/icons";
 import { RemoteCursorStyles } from "@/components/pad/RemoteCursorStyles";
 import { RunOutput } from "@/components/pad/RunOutput";
+import { GraphView } from "@/components/pad/GraphView";
+import { parseGraphProgram } from "@/lib/graph-directives";
 import {
   type AwarenessUser,
   colorFor,
@@ -49,6 +52,7 @@ export function PadEditorInner({
   const [argsText, setArgsText] = useState<string>("");
   const [running, setRunning] = useState<boolean>(false);
   const [output, setOutput] = useState<RunResult | RunError | null>(null);
+  const [runSeq, setRunSeq] = useState<number>(0);
 
   const { resolvedTheme } = useTheme();
   const monacoTheme = resolvedTheme === "light" ? "vs" : "vs-dark";
@@ -78,6 +82,10 @@ export function PadEditorInner({
   useRoomStatusPolling(roomId, deleted, setDeleted);
 
   const language = findLanguage(languageId);
+
+  const showGraph = languageId === "python";
+  const stdout = output && !("error" in output) ? output.stdout : "";
+  const graphProgram = useMemo(() => parseGraphProgram(stdout), [stdout]);
 
   const bindingRef = useRef<MonacoBinding | null>(null);
   useEffect(() => {
@@ -129,14 +137,17 @@ export function PadEditorInner({
       const durationMs = Math.round(performance.now() - startedAt);
       if ("error" in json) {
         setOutput(json);
+        setRunSeq((n) => n + 1);
       } else {
         setOutput({ ...json, durationMs });
+        setRunSeq((n) => n + 1);
       }
     } catch (err) {
       setOutput({
         error: "client_error",
         message: err instanceof Error ? err.message : String(err),
       });
+      setRunSeq((n) => n + 1);
     } finally {
       setRunning(false);
     }
@@ -229,19 +240,31 @@ export function PadEditorInner({
       ) : null}
 
       <div className="min-h-0 flex-1">
-        <Editor
-          height="100%"
-          language={languageId}
-          theme={monacoTheme}
-          onMount={handleEditorMount}
-          options={{
-            fontSize: 14,
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            readOnly: !!deleted,
-            domReadOnly: !!deleted,
-          }}
-        />
+        <Group orientation="horizontal" style={{ height: "100%" }}>
+          <Panel defaultSize={showGraph ? 65 : 100} minSize={30}>
+            <Editor
+              height="100%"
+              language={languageId}
+              theme={monacoTheme}
+              onMount={handleEditorMount}
+              options={{
+                fontSize: 14,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                readOnly: !!deleted,
+                domReadOnly: !!deleted,
+              }}
+            />
+          </Panel>
+          {showGraph ? (
+            <>
+              <Separator className="w-1 bg-divider hover:bg-primary" />
+              <Panel defaultSize={35} minSize={20} collapsible collapsedSize={0}>
+                <GraphView key={`graph-${runSeq}`} program={graphProgram} />
+              </Panel>
+            </>
+          ) : null}
+        </Group>
       </div>
 
       <div className="flex items-start gap-2 border-t border-divider bg-content2 px-4 py-2">
