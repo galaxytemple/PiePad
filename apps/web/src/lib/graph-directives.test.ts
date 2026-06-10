@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampStep, frameAt, parseGraphProgram } from "./graph-directives";
+import { clampStep, frameAt, parseGraphProgram, stripGraphDirectives } from "./graph-directives";
 import { PALETTE } from "@/components/pad/types";
 
 describe("parseGraphProgram — graph: directive", () => {
@@ -164,5 +164,23 @@ describe("caps and warnings", () => {
     const p = parseGraphProgram(lines.join("\n"));
     expect(p.stepCount).toBe(8);
     expect(p.warnings.some((w) => w.includes("more than 8 graphs"))).toBe(true);
+  });
+});
+
+describe("stripGraphDirectives", () => {
+  it("removes recognized directive lines (valid or not) and keeps real output", () => {
+    const stdout = [
+      "starting",
+      "graph: [[1],[0]]",
+      "graph_node:0:color:1",
+      "graph@tree:undirected: [[]]",
+      "graph_edge:0:1:label:x",
+      "done",
+    ].join("\n");
+    expect(stripGraphDirectives(stdout)).toBe("starting\ndone");
+  });
+
+  it("leaves lines that merely start with the word graph but are not directives", () => {
+    expect(stripGraphDirectives("graphing is fun")).toBe("graphing is fun");
   });
 });
