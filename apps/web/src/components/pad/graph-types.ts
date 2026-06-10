@@ -17,7 +17,7 @@ export interface SingleGraphState {
   mode: GraphMode;
   adjacency: number[][]; // node -> out-neighbors
   nodes: Record<number, NodeDeco>;
-  edges: Record<string, EdgeDeco>; // key = `${src}->${dst}`
+  edges: Record<string, EdgeDeco>; // key = `${src}->${dst}` (always directional; undirected rendering normalises direction at the renderer)
 }
 
 export type MultiGraphState = Record<string, SingleGraphState>; // keyed by graph id

@@ -11,6 +11,11 @@ const ID_RE = /^[A-Za-z0-9_-]+$/;
 const MAX_NODES = 500;
 const MAX_GRAPHS = 8;
 
+// Strict non-negative decimal integer (rejects "", "0x3", "1.0", "1e2").
+function parseIndex(s: string): number | null {
+  return /^\d+$/.test(s.trim()) ? Number(s) : null;
+}
+
 // Split `s` on `sep` into at most `max` parts; the final part keeps any
 // remaining separators (so info/label text may contain colons).
 function splitMax(s: string, sep: string, max: number): string[] {
@@ -95,13 +100,13 @@ function parseNodeLine(
   if (!adj) return null; // node before graph for this id
   const parts = splitMax(body, ":", 3); // [node, attr, value]
   if (parts.length < 3) return null;
-  const node = Number(parts[0]);
-  if (!Number.isInteger(node) || node < 0 || node >= adj.length) return null;
+  const node = parseIndex(parts[0]!);
+  if (node === null || node >= adj.length) return null;
   const attr = parts[1];
   const value = parts[2];
   if (attr === "color") {
-    const c = Number(value.trim());
-    if (!Number.isInteger(c) || c < 1 || c > 16) return null;
+    const c = parseIndex(value);
+    if (c === null || c < 1 || c > 16) return null;
     return { kind: "node", id, node, attr: "color", value: PALETTE[c - 1]! };
   }
   if (attr === "info") {
@@ -119,15 +124,14 @@ function parseEdgeLine(
   if (!adj) return null;
   const parts = splitMax(body, ":", 4); // [src, dst, attr, value]
   if (parts.length < 4) return null;
-  const srcN = Number(parts[0]);
-  const dstN = Number(parts[1]);
-  if (!Number.isInteger(srcN) || !Number.isInteger(dstN)) return null;
-  if (srcN < 0 || dstN < 0 || srcN >= adj.length || dstN >= adj.length) return null;
+  const srcN = parseIndex(parts[0]!);
+  const dstN = parseIndex(parts[1]!);
+  if (srcN === null || dstN === null || srcN >= adj.length || dstN >= adj.length) return null;
   const attr = parts[2];
   const value = parts[3];
   if (attr === "color") {
-    const c = Number(value.trim());
-    if (!Number.isInteger(c) || c < 1 || c > 16) return null;
+    const c = parseIndex(value);
+    if (c === null || c < 1 || c > 16) return null;
     return { kind: "edge", id, src: srcN, dst: dstN, attr: "color", value: PALETTE[c - 1]! };
   }
   if (attr === "label") {
@@ -195,7 +199,7 @@ function applyEvent(state: MultiGraphState, ev: GraphEvent): void {
     state[ev.id] = {
       id: ev.id,
       mode: ev.mode,
-      adjacency: ev.adjacency,
+      adjacency: ev.adjacency.map((row) => [...row]),
       nodes: {},
       edges: {},
     } satisfies SingleGraphState;

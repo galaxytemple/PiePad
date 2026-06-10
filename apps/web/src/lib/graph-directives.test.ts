@@ -227,3 +227,25 @@ describe("invalid input is ignored (no step consumed)", () => {
     expect(p.stepCount).toBe(1);
   });
 });
+
+describe("undirected edge keys remain directional in state", () => {
+  it("stores graph_edge under src->dst even when the graph is undirected", () => {
+    const p = parseGraphProgram(
+      ["graph:undirected: [[1],[0]]", "graph_edge:0:1:color:1"].join("\n")
+    );
+    const s = frameAt(p, p.stepCount - 1);
+    expect(s.main.edges["0->1"]).toEqual({ color: PALETTE[0] });
+    expect(s.main.edges["1->0"]).toBeUndefined();
+  });
+});
+
+describe("strict decimal index parsing", () => {
+  it("rejects an empty node index (double colon)", () => {
+    const p = parseGraphProgram("graph: [[1],[0]]\ngraph_node::color:1");
+    expect(p.stepCount).toBe(1);
+  });
+  it("rejects a non-decimal color index", () => {
+    const p = parseGraphProgram("graph: [[1],[0]]\ngraph_node:0:color:0x3");
+    expect(p.stepCount).toBe(1);
+  });
+});
