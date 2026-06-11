@@ -4,16 +4,17 @@ import { useTheme } from "next-themes";
 import { useMemo, useState } from "react";
 import { clampStep, frameAt } from "@/lib/graph-directives";
 import type { GraphProgram, SingleGraphState } from "./graph-types";
-import { LAYOUTS, type LayoutName, useCytoscapeGraph } from "./useCytoscapeGraph";
+import { type LayoutName, useCytoscapeGraph } from "./useCytoscapeGraph";
 
 const USAGE = `print directives in your Python code:
   graph: [[1,2],[1],[2]]            define a directed graph (adjacency list)
   graph:undirected: [[1],[0]]       undirected graph
   graph_node:0:color:1              colour node 0 (1..16)
-  graph_node:0:info:children 1      label under node 0
+  graph_node:0:info:a\\nb           label under node 0 (\\n = line break)
   graph_edge:0:1:color:3            colour edge 0->1
   graph_edge:0:1:label:w=5          label edge 0->1 (weights)
-  graph@tree:...  graph_node@tree:..multiple graphs via @id`;
+  graph@tree:...  graph_node@tree:..multiple graphs via @id
+Tip: click the panel, then use ← / → to step.`;
 
 function GraphCanvas({
   state,
@@ -38,7 +39,6 @@ function GraphCanvas({
 export function GraphView({ program }: { program: GraphProgram }) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme !== "light";
-  const [layout, setLayout] = useState<LayoutName>("breadthfirst");
   const [showHelp, setShowHelp] = useState(false);
   // Start at the final step so a user who ignores stepping sees the end result.
   // The timeline is reset per run by the parent re-mounting this component with
@@ -46,8 +46,12 @@ export function GraphView({ program }: { program: GraphProgram }) {
   const [rawStep, setRawStep] = useState(() =>
     Math.max(0, program.stepCount - 1)
   );
+  // Single fixed layout for now — no per-graph algorithm picker.
+  const layout: LayoutName = "breadthfirst";
 
   const step = clampStep(rawStep, program.stepCount);
+  const stepBy = (delta: number) =>
+    setRawStep((s) => clampStep(s + delta, program.stepCount));
   const state = useMemo(() => frameAt(program, step), [program, step]);
   const ids = Object.keys(state);
   const currentEvent = program.events[step];
@@ -57,21 +61,21 @@ export function GraphView({ program }: { program: GraphProgram }) {
       : "";
 
   return (
-    <div className="flex h-full flex-col bg-content1">
+    // tabIndex makes the panel focusable so ← / → step the timeline once the
+    // graph view (not the editor) has focus.
+    <div
+      className="flex h-full flex-col bg-content1 outline-none"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        // Let a focused range slider keep its native arrow behaviour.
+        if ((e.target as HTMLElement).tagName === "INPUT") return;
+        e.preventDefault();
+        stepBy(e.key === "ArrowRight" ? 1 : -1);
+      }}
+    >
       <div className="flex items-center gap-2 border-b border-divider px-2 py-1">
         <span className="text-xs font-medium">Graph</span>
-        <select
-          value={layout}
-          onChange={(e) => setLayout(e.target.value as LayoutName)}
-          className="rounded border border-divider bg-content1 px-1 py-0.5 text-xs"
-          aria-label="Layout"
-        >
-          {LAYOUTS.map((l) => (
-            <option key={l} value={l}>
-              {l}
-            </option>
-          ))}
-        </select>
         <button
           type="button"
           onClick={() => setShowHelp((v) => !v)}
@@ -123,7 +127,7 @@ export function GraphView({ program }: { program: GraphProgram }) {
         <div className="flex items-center gap-2 border-t border-divider px-2 py-1">
           <button
             type="button"
-            onClick={() => setRawStep((s) => clampStep(s - 1, program.stepCount))}
+            onClick={() => stepBy(-1)}
             className="rounded border border-divider px-2 text-sm disabled:opacity-40"
             disabled={step <= 0}
             aria-label="Previous step"
@@ -132,7 +136,7 @@ export function GraphView({ program }: { program: GraphProgram }) {
           </button>
           <button
             type="button"
-            onClick={() => setRawStep((s) => clampStep(s + 1, program.stepCount))}
+            onClick={() => stepBy(1)}
             className="rounded border border-divider px-2 text-sm disabled:opacity-40"
             disabled={step >= program.stepCount - 1}
             aria-label="Next step"
@@ -155,7 +159,7 @@ export function GraphView({ program }: { program: GraphProgram }) {
       ) : null}
 
       {infoLine ? (
-        <div className="border-t border-divider px-2 py-1 font-mono text-[11px] text-default-600">
+        <div className="whitespace-pre-line border-t border-divider px-2 py-1 font-mono text-[11px] text-default-600">
           {infoLine}
         </div>
       ) : null}
