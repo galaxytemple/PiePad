@@ -132,9 +132,13 @@ export function useCytoscapeGraph(
     const structureKey = `${state.mode}:${JSON.stringify(state.adjacency)}`;
     if (structureKey !== structureKeyRef.current) {
       // Trees get a fixed root (node 0) so they lay out top-down; other modes
-      // let breadthfirst auto-pick roots.
+      // let breadthfirst auto-pick roots. `roots` is only meaningful for
+      // breadthfirst (the current fixed layout) — guard so a future
+      // layout-picker can't silently pass it to cose/circle/grid.
       const layoutOpts =
-        state.mode === "tree" && state.adjacency.length > 0
+        state.mode === "tree" &&
+        layout === "breadthfirst" &&
+        state.adjacency.length > 0
           ? { name: layout, padding: 12, roots: ["n0"] }
           : { name: layout, padding: 12 };
       cy.layout(layoutOpts as cytoscape.LayoutOptions).run();
