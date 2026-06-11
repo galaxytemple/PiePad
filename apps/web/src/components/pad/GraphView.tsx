@@ -57,8 +57,8 @@ export function GraphView({ program }: { program: GraphProgram }) {
   const ids = Object.keys(state);
   const currentEvent = program.events[step];
   const infoLine =
-    currentEvent?.kind === "node" && currentEvent.attr === "info"
-      ? currentEvent.value
+    currentEvent?.kind === "node" && currentEvent.deco.info !== undefined
+      ? currentEvent.deco.info
       : "";
 
   return (

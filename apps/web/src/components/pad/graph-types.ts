@@ -24,8 +24,8 @@ export type MultiGraphState = Record<string, SingleGraphState>; // keyed by grap
 
 export type GraphEvent =
   | { kind: "graph"; id: string; mode: GraphMode; adjacency: number[][] }
-  | { kind: "node"; id: string; node: number; attr: "color" | "info"; value: string }
-  | { kind: "edge"; id: string; src: number; dst: number; attr: "color" | "label"; value: string };
+  | { kind: "node"; id: string; node: number; deco: NodeDeco }
+  | { kind: "edge"; id: string; src: number; dst: number; deco: EdgeDeco };
 
 export interface GraphProgram {
   events: GraphEvent[];
