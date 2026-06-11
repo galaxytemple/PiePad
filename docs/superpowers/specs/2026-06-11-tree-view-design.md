@@ -22,16 +22,29 @@ structure; it emits the same event the `graph:` directive does.
 tree[@id]: [1,2,3,null,null,4,5]
 ```
 
-- The payload is a JSON array of `number | null`, in **LeetCode level-order**:
+- The payload is an array of `number | null/None`, in **LeetCode level-order**:
   the array is a breadth-first listing where a present node contributes its two
-  child slots to the array, and a `null` marks an absent child (whose own
-  children are NOT listed).
+  child slots to the array, and a missing child is marked `null` (JSON) **or
+  `None`** (Python). Both are accepted — `None` is normalised to `null` before
+  parsing (Python users naturally write `print("tree:", [1, 2, None, 3])`, which
+  prints `tree: [1, 2, None, 3]`).
 - `@id` is the optional graph id (default `main`), identical to `graph:`.
+
+### 2.0 Whitespace
+
+Inputs are whitespace-tolerant where it matters:
+- Leading/trailing whitespace on the stdout line is trimmed.
+- Whitespace **inside the array payload** is ignored (`JSON.parse` handles
+  `[1, 2, null, 3]`), so a Python-printed list works verbatim.
+- Whitespace around the keyword / `@id` / mode tokens is trimmed at their
+  boundaries, but arbitrary whitespace *inside* a token (e.g. `dire cted`) is
+  not supported — no realistic stdout contains it.
 
 ### 2.1 Decode (standard LeetCode deserialization)
 
-Decode the array into a **children adjacency list** keyed by a compact
-**level-order index** assigned in node-creation order (root = 0):
+First normalise Python `None` to JSON `null` (`payload.replace(/\bNone\b/g, "null")`),
+then `JSON.parse`. Decode the array into a **children adjacency list** keyed by a
+compact **level-order index** assigned in node-creation order (root = 0):
 
 ```
 decodeBinaryTree(vals): number[][]
@@ -99,9 +112,10 @@ structure change (existing stability rule).
 
 ## 6. Validation & Caps (reuse)
 
-- Payload must `JSON.parse` to an array whose entries are each `number` or
-  `null`; anything else (malformed JSON, nested arrays, strings) → ignore the
-  line, keep the previous state (line-by-line, per existing rules).
+- After normalising `None`→`null`, the payload must `JSON.parse` to an array
+  whose entries are each `number` or `null`; anything else (malformed JSON,
+  nested arrays, strings) → ignore the line, keep the previous state
+  (line-by-line, per existing rules).
 - Empty array or `vals[0] === null` → empty tree (0 nodes); the directive is
   still a valid event (an empty graph for that id) — or skipped if it would
   produce nothing meaningful. Decision: **emit the event with 0 nodes** (renders
@@ -142,6 +156,8 @@ graph event, which `tree:` reuses).
   - `decodeBinaryTree([1,2,3,null,null,4,5])` → `[[1,2],[],[3,4],[],[]]`.
   - left-only / right-only children (`[1,2,null]`, `[1,null,2]`).
   - empty (`[]`) and root-null (`[null]`) → 0 nodes.
+  - **`None` accepted like `null`**: `tree: [1, 2, None, 3]` parses (and the
+    Python-printed spacing `[1, 2, None, 3]` works verbatim).
   - non-null `0` is a present node (`[0,0,0]`).
   - `tree@t: [...]` routes to id `t` with `mode: "tree"`.
   - invalid payloads ignored (`tree: [1,[2]]`, `tree: {}`, `tree: nope`).
