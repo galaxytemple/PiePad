@@ -40,6 +40,7 @@ jobs:
           context: .
           file: ./docker/web.Dockerfile
           platforms: linux/amd64
+          push: true
           # NEXT_PUBLIC_* must be inlined at build time (Next.js bakes them into
           # the client bundle). Derived from the PUBLIC_HOST secret.
           build-args: |
@@ -56,6 +57,7 @@ jobs:
           context: .
           file: ./docker/ws.Dockerfile
           platforms: linux/amd64
+          push: true
           tags: |
             ghcr.io/galaxytemple/piepad-ws:${{ github.sha }}
             ghcr.io/galaxytemple/piepad-ws:latest
@@ -68,6 +70,7 @@ jobs:
           context: .
           file: ./docker/cleanup.Dockerfile
           platforms: linux/amd64
+          push: true
           tags: |
             ghcr.io/galaxytemple/piepad-cleanup:${{ github.sha }}
             ghcr.io/galaxytemple/piepad-cleanup:latest
