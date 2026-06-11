@@ -1,5 +1,19 @@
 # Deploying PiePad to OCI
 
+> **⚠️ Architecture correction (2026-06-11).** This document predates the current
+> setup and describes a two-host split (a separate "Piston host") that was
+> **abandoned**: Piston's image is amd64-only so it cannot run on an ARM A1, and
+> the split added needless complexity. **Production now runs everything on one
+> x86 box** — `caddy + web + ws + cleanup + piston` — with Piston co-located via
+> the compose `runtime` profile and reached at the internal `http://piston:2000`.
+> Images are built in **GitHub Actions** and pushed to **GHCR** (`linux/amd64`);
+> the box only `docker compose --profile runtime pull && up -d` (no on-box build).
+> The authoritative source is `.github/workflows/deploy.yml` +
+> `docker/docker-compose.yml`. Treat the two-host / "Piston host" / multi-arch
+> instructions below as **superseded** — in particular the `PISTON_URL` secret is
+> `http://piston:2000/api/v2`, not a host IP, and there is no separate Piston
+> bootstrap or port-2000 cross-host firewall rule.
+
 Production runs on **two OCI instances**:
 
 - **App host** — caddy + web + ws + cleanup. The user-facing entry point.
