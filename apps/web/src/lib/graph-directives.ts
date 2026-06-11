@@ -152,6 +152,11 @@ function parseEdgeLine(
 // Decode a LeetCode level-order binary-tree array into a children adjacency
 // list keyed by compact level-order index (root = 0). `None` must already be
 // normalised to null by the caller.
+//
+// Slot position (left vs right) is NOT preserved: two trees that differ only in
+// which subtree is absent (e.g. [1,2,null] vs [1,null,2]) produce identical
+// adjacency. That's fine for the current breadthfirst, index-labelled layout.
+// If BST-aware left/right placement is ever needed, return {child, slot} pairs.
 function decodeBinaryTree(vals: (number | null)[]): number[][] {
   if (vals.length === 0 || vals[0] === null) return [];
   const children: number[][] = [[]];
@@ -197,6 +202,9 @@ function parseTreeLine(
     if (v === null) {
       vals.push(null);
     } else if (typeof v === "number" && Number.isFinite(v)) {
+      // Any finite number = a present node. Unlike graph adjacency (which holds
+      // node indices and requires integers), tree entries are node *values* —
+      // only null-vs-present matters here, so floats are accepted as present.
       vals.push(v);
     } else {
       return null; // strings, booleans, nested arrays, etc.
