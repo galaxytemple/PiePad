@@ -216,15 +216,17 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Configure SSH (A1)
+        # Reuses the same DEPLOY_SSH_KEY as the web box — its public key must
+        # also be in the A1 box's ~/.ssh/authorized_keys.
         env:
-          PISTON_SSH_KEY: ${{ secrets.PISTON_SSH_KEY }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           PISTON_DEPLOY_HOST: ${{ secrets.PISTON_DEPLOY_HOST }}
         run: |
           set -e
           if [ -z "${PISTON_DEPLOY_HOST:-}" ]; then echo "::error::PISTON_DEPLOY_HOST empty"; exit 1; fi
-          if [ -z "${PISTON_SSH_KEY:-}" ]; then echo "::error::PISTON_SSH_KEY empty"; exit 1; fi
+          if [ -z "${DEPLOY_SSH_KEY:-}" ]; then echo "::error::DEPLOY_SSH_KEY empty"; exit 1; fi
           mkdir -p ~/.ssh
-          printf '%s\n' "$PISTON_SSH_KEY" > ~/.ssh/piston
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/piston
           chmod 600 ~/.ssh/piston
           ssh-keyscan -T 15 "$PISTON_DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 

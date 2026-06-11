@@ -277,8 +277,17 @@ Add / change:
 | `PISTON_URL` | `http://<A1_PRIVATE_IP>:2000/api/v2` (changed) |
 | `PISTON_DEPLOY_HOST` | A1 **public** IP (for SSH from CI) |
 | `PISTON_DEPLOY_USER` | `ubuntu` / `opc` |
-| `PISTON_SSH_KEY` | A1 deploy private key (or reuse `DEPLOY_SSH_KEY` if you add the same pubkey to A1) |
 | (optional) `GHCR_PAT` | read-only PAT for `docker login ghcr.io` on the VMs, if packages stay private |
+
+`deploy-piston` reuses the existing **`DEPLOY_SSH_KEY`** to SSH into A1 — no
+separate Piston key. Add that key's **public** half to A1's
+`~/.ssh/authorized_keys`:
+
+```bash
+# from your laptop — append the deploy public key to A1
+cat ~/.ssh/<your-deploy-key>.pub | \
+  ssh -i <oci-login-key> ubuntu@<A1_PUBLIC_IP> "cat >> ~/.ssh/authorized_keys"
+```
 
 `A1_PRIVATE_IP` and `WEB_PRIVATE_IP` are used in the one-time A1 setup
 (iptables, compose bind, PISTON_URL) — they don't need to be CI secrets unless
