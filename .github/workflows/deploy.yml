@@ -135,8 +135,9 @@ jobs:
 
           NEXT_PUBLIC_WS_URL=wss://${{ secrets.PUBLIC_HOST }}/yjs
           WS_INTERNAL_URL=http://ws:1234
-          # Points at Piston on the A1 box over the private VCN.
-          PISTON_URL=${{ secrets.PISTON_URL }}
+          # Piston runs co-located on this box (compose `runtime` profile),
+          # reached over the internal docker network.
+          PISTON_URL=http://piston:2000/api/v2
 
           BCRYPT_ROUNDS=12
           RUN_RATE_LIMIT_PER_MINUTE=10
@@ -186,8 +187,9 @@ jobs:
 
           ssh -i ~/.ssh/deploy "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail
             cd /opt/piepad
-            ./scripts/dc pull
-            ./scripts/dc up -d --remove-orphans
+            # --profile runtime starts the co-located Piston alongside the app.
+            ./scripts/dc --profile runtime pull
+            ./scripts/dc --profile runtime up -d --remove-orphans
             ./scripts/dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile \
               || ./scripts/dc restart caddy
             docker image prune -f
@@ -205,52 +207,3 @@ jobs:
             sleep 8
           done
           echo "::warning::homepage did not respond within 40s — check ./scripts/dc logs caddy/web"
-
-  # ---------------------------------------------------------------------------
-  # Update Piston on the A1 box. Piston rarely changes, so this runs ONLY on a
-  # manual workflow_dispatch (not on every push). First-time setup is the
-  # one-shot script/a1-piston-bootstrap.sh run directly on the A1 box.
-  # ---------------------------------------------------------------------------
-  deploy-piston:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure SSH (A1)
-        # Reuses the same DEPLOY_SSH_KEY as the web box — its public key must
-        # also be in the A1 box's ~/.ssh/authorized_keys.
-        env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          PISTON_DEPLOY_HOST: ${{ secrets.PISTON_DEPLOY_HOST }}
-        run: |
-          set -e
-          if [ -z "${PISTON_DEPLOY_HOST:-}" ]; then echo "::error::PISTON_DEPLOY_HOST empty"; exit 1; fi
-          if [ -z "${DEPLOY_SSH_KEY:-}" ]; then echo "::error::DEPLOY_SSH_KEY empty"; exit 1; fi
-          mkdir -p ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/piston
-          chmod 600 ~/.ssh/piston
-          ssh-keyscan -T 15 "$PISTON_DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-
-      - name: Sync piston files & restart
-        env:
-          PISTON_DEPLOY_USER: ${{ secrets.PISTON_DEPLOY_USER }}
-          PISTON_DEPLOY_HOST: ${{ secrets.PISTON_DEPLOY_HOST }}
-          A1_PRIVATE_IP: ${{ secrets.A1_PRIVATE_IP }}
-        run: |
-          DEST="$PISTON_DEPLOY_USER@$PISTON_DEPLOY_HOST:/opt/piepad-piston"
-          ssh -i ~/.ssh/piston "$PISTON_DEPLOY_USER@$PISTON_DEPLOY_HOST" \
-            "mkdir -p /opt/piepad-piston/docker /opt/piepad-piston/scripts"
-          scp -i ~/.ssh/piston docker/piston-compose.yml "$DEST/docker/piston-compose.yml"
-          scp -i ~/.ssh/piston scripts/install-piston-langs.sh "$DEST/scripts/install-piston-langs.sh"
-
-          ssh -i ~/.ssh/piston "$PISTON_DEPLOY_USER@$PISTON_DEPLOY_HOST" "set -euo pipefail
-            cd /opt/piepad-piston
-            printf 'PISTON_BIND_IP=%s\n' '$A1_PRIVATE_IP' > .env
-            chmod 600 .env
-            chmod +x scripts/install-piston-langs.sh
-            docker compose --env-file .env -f docker/piston-compose.yml pull
-            docker compose --env-file .env -f docker/piston-compose.yml up -d
-            bash scripts/install-piston-langs.sh \"http://$A1_PRIVATE_IP:2000\"
-          "

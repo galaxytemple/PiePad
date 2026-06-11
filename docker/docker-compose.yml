@@ -140,13 +140,15 @@ services:
     security_opt:
       - seccomp=unconfined
       - apparmor=unconfined
-    # No ports published: web reaches piston via the Docker-internal network as
-    # http://piston:2000. Publishing 2000 to the host would let any client on
-    # the internet POST /api/v2/execute and bypass /api/run rate limiting.
-    # Local dev that needs to hit piston directly can `docker compose port
-    # piston 2000` or override this file with a docker-compose.override.yml.
+    # web reaches piston via the Docker-internal network as http://piston:2000.
+    # Also published to 127.0.0.1 ONLY so the box itself can run
+    # scripts/install-piston-langs.sh (default http://localhost:2000) — this is
+    # loopback, NOT internet-exposed, so no one can POST /api/v2/execute from
+    # outside and bypass /api/run rate limiting.
     expose:
       - "2000"
+    ports:
+      - "127.0.0.1:2000:2000"
     environment:
       PISTON_LOG_LEVEL: INFO
       PISTON_BIND_ADDRESS: 0.0.0.0:2000
