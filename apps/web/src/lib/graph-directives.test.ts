@@ -255,3 +255,59 @@ describe("strict decimal index parsing", () => {
     expect(p.stepCount).toBe(1);
   });
 });
+
+describe("tree: directive (binary tree array)", () => {
+  it("decodes a LeetCode level-order array into child adjacency, mode tree", () => {
+    const p = parseGraphProgram("tree: [1,2,3,null,null,4,5]");
+    expect(p.stepCount).toBe(1);
+    const s = frameAt(p, 0);
+    expect(s.main.mode).toBe("tree");
+    expect(s.main.adjacency).toEqual([[1, 2], [], [3, 4], [], []]);
+  });
+
+  it("accepts Python None like null (and Python-printed spacing)", () => {
+    // [1, 2, None, 3]: root(0).left=2(idx1), root.right=null(absent),
+    // node1(idx1).left=3(idx2). Standard LeetCode level-order decoding.
+    const p = parseGraphProgram("tree: [1, 2, None, 3]");
+    const s = frameAt(p, 0);
+    expect(s.main.adjacency).toEqual([[1], [2], []]);
+  });
+
+  it("handles left-only and right-only children", () => {
+    expect(frameAt(parseGraphProgram("tree: [1,2,null]"), 0).main.adjacency).toEqual([[1], []]);
+    expect(frameAt(parseGraphProgram("tree: [1,null,2]"), 0).main.adjacency).toEqual([[1], []]);
+  });
+
+  it("treats value 0 as a present node (only null/None are absent)", () => {
+    expect(frameAt(parseGraphProgram("tree: [0,0,0]"), 0).main.adjacency).toEqual([[1, 2], [], []]);
+  });
+
+  it("empty array and root-null produce a 0-node tree", () => {
+    expect(frameAt(parseGraphProgram("tree: []"), 0).main.adjacency).toEqual([]);
+    expect(frameAt(parseGraphProgram("tree: [null]"), 0).main.adjacency).toEqual([]);
+  });
+
+  it("routes @id and applies graph_node decorations by level-order index", () => {
+    const src = ["tree@t: [1,2,3]", "graph_node@t:0:color:1", "graph_node@t:2:info:hit"].join("\n");
+    const p = parseGraphProgram(src);
+    const s = frameAt(p, p.stepCount - 1);
+    expect(Object.keys(s)).toEqual(["t"]);
+    expect(s.t.mode).toBe("tree");
+    expect(s.t.nodes[0]).toEqual({ color: PALETTE[0] });
+    expect(s.t.nodes[2]).toEqual({ info: "hit" });
+  });
+
+  it("ignores invalid payloads (nested array, object, non-array, garbage)", () => {
+    expect(parseGraphProgram("tree: [1,[2]]").stepCount).toBe(0);
+    expect(parseGraphProgram("tree: {}").stepCount).toBe(0);
+    expect(parseGraphProgram("tree: nope").stepCount).toBe(0);
+    expect(parseGraphProgram('tree: ["a"]').stepCount).toBe(0);
+  });
+
+  it("rejects a tree over 500 nodes with a warning", () => {
+    const big = JSON.stringify(Array.from({ length: 501 }, (_, i) => i));
+    const p = parseGraphProgram(`tree: ${big}`);
+    expect(p.stepCount).toBe(0);
+    expect(p.warnings.some((w) => w.includes("max 500"))).toBe(true);
+  });
+});

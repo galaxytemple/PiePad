@@ -149,6 +149,75 @@ function parseEdgeLine(
   return null;
 }
 
+// Decode a LeetCode level-order binary-tree array into a children adjacency
+// list keyed by compact level-order index (root = 0). `None` must already be
+// normalised to null by the caller.
+function decodeBinaryTree(vals: (number | null)[]): number[][] {
+  if (vals.length === 0 || vals[0] === null) return [];
+  const children: number[][] = [[]];
+  const queue: number[] = [0];
+  let i = 1;
+  let next = 1;
+  while (queue.length > 0 && i < vals.length) {
+    const parent = queue.shift()!;
+    for (let slot = 0; slot < 2 && i < vals.length; slot++) {
+      const v = vals[i];
+      i++;
+      if (v !== null) {
+        const idx = next;
+        next++;
+        children[idx] = [];
+        children[parent]!.push(idx);
+        queue.push(idx);
+      }
+    }
+  }
+  return children;
+}
+
+function parseTreeLine(
+  id: string,
+  body: string,
+  structures: Map<string, number[][]>,
+  warnings: string[]
+): GraphEvent | null {
+  // Accept Python None as well as JSON null; whitespace inside the array is
+  // tolerated by JSON.parse.
+  const payload = body.trim().replace(/\bNone\b/g, "null");
+  let json: unknown;
+  try {
+    json = JSON.parse(payload);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(json)) return null;
+
+  const vals: (number | null)[] = [];
+  for (const v of json) {
+    if (v === null) {
+      vals.push(null);
+    } else if (typeof v === "number" && Number.isFinite(v)) {
+      vals.push(v);
+    } else {
+      return null; // strings, booleans, nested arrays, etc.
+    }
+  }
+
+  const adjacency = decodeBinaryTree(vals);
+  const n = adjacency.length;
+  if (n > MAX_NODES) {
+    warnings.push(`tree @${id} has ${n} nodes (max ${MAX_NODES}); ignored`);
+    return null;
+  }
+  if (!structures.has(id) && structures.size >= MAX_GRAPHS) {
+    warnings.push(`more than ${MAX_GRAPHS} graphs; @${id} ignored`);
+    return null;
+  }
+
+  structures.set(id, adjacency);
+  return { kind: "graph", id, mode: "tree", adjacency };
+}
+
 // `structures` is a local accumulator tracking each id's current adjacency so
 // node/edge directives can be range-validated against the graph in effect at
 // that point in the stream. Mutating it during this forward pass is local
@@ -159,7 +228,7 @@ function parseLine(
   warnings: string[]
 ): GraphEvent | null {
   const line = raw.trim();
-  if (!line.startsWith("graph")) return null;
+  if (!line.startsWith("graph") && !line.startsWith("tree")) return null;
   const firstColon = line.indexOf(":");
   if (firstColon === -1) return null;
   const head = line.slice(0, firstColon).trim();
@@ -170,6 +239,7 @@ function parseLine(
   if (kw === "graph") return parseGraphLine(id, body, structures, warnings);
   if (kw === "graph_node") return parseNodeLine(id, body, structures);
   if (kw === "graph_edge") return parseEdgeLine(id, body, structures);
+  if (kw === "tree") return parseTreeLine(id, body, structures, warnings);
   return null;
 }
 
