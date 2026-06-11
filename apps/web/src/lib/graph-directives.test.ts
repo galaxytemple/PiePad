@@ -234,6 +234,17 @@ describe("invalid input is ignored (no step consumed)", () => {
   });
 });
 
+describe("stripGraphDirectives removes tree directives too", () => {
+  it("strips tree: and tree@id: lines, keeps real output", () => {
+    const stdout = ["start", "tree: [1,2,3]", "tree@t: [1,null,2]", "end"].join("\n");
+    expect(stripGraphDirectives(stdout)).toBe("start\nend");
+  });
+
+  it("does not strip a plain word starting with tree", () => {
+    expect(stripGraphDirectives("treehouse plans")).toBe("treehouse plans");
+  });
+});
+
 describe("undirected edge keys remain directional in state", () => {
   it("stores graph_edge under src->dst even when the graph is undirected", () => {
     const p = parseGraphProgram(
