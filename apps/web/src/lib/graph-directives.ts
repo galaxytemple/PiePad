@@ -127,9 +127,14 @@ function parseNodeLine(
   if (colon === -1) return null;
   const node = parseIndex(body.slice(0, colon));
   if (node === null || node >= adj.length) return null;
-  const deco = parseDecoChain(body.slice(colon + 1), "info", true);
-  if (!deco) return null;
-  return { kind: "node", id, node, deco: deco as NodeDeco };
+  const chain = parseDecoChain(body.slice(colon + 1), "info", true);
+  if (!chain) return null;
+  // Build the typed deco from known keys (avoids an unsound `as` cast that
+  // would let a future stray key slip through unchecked).
+  const deco: NodeDeco = {};
+  if (chain.color !== undefined) deco.color = chain.color;
+  if (chain.info !== undefined) deco.info = chain.info;
+  return { kind: "node", id, node, deco };
 }
 
 function parseEdgeLine(
@@ -149,9 +154,12 @@ function parseEdgeLine(
   if (srcN === null || dstN === null || srcN >= adj.length || dstN >= adj.length) {
     return null;
   }
-  const deco = parseDecoChain(after.slice(c2 + 1), "label", false);
-  if (!deco) return null;
-  return { kind: "edge", id, src: srcN, dst: dstN, deco: deco as EdgeDeco };
+  const chain = parseDecoChain(after.slice(c2 + 1), "label", false);
+  if (!chain) return null;
+  const deco: EdgeDeco = {};
+  if (chain.color !== undefined) deco.color = chain.color;
+  if (chain.label !== undefined) deco.label = chain.label;
+  return { kind: "edge", id, src: srcN, dst: dstN, deco };
 }
 
 // Decode a LeetCode level-order binary-tree array into a children adjacency

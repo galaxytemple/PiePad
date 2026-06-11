@@ -56,6 +56,8 @@ export function GraphView({ program }: { program: GraphProgram }) {
   const state = useMemo(() => frameAt(program, step), [program, step]);
   const ids = Object.keys(state);
   const currentEvent = program.events[step];
+  // Shows the info annotation from this specific step's event (not the node's
+  // accumulated state) — e.g. a `color:6:info:hello` directive surfaces "hello".
   const infoLine =
     currentEvent?.kind === "node" && currentEvent.deco.info !== undefined
       ? currentEvent.deco.info

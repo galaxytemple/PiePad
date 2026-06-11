@@ -301,6 +301,15 @@ describe("combined attributes in one directive", () => {
     expect(parseGraphProgram("graph: [[]]\ngraph_node:0:color:").stepCount).toBe(1);
     expect(parseGraphProgram("graph: [[]]\ngraph_node:0").stepCount).toBe(1);
   });
+
+  it("rejects color:0 (palette index is 1-based)", () => {
+    expect(parseGraphProgram("graph: [[]]\ngraph_node:0:color:0").stepCount).toBe(1);
+  });
+
+  it("does NOT convert literal \\n in an edge label (only node info does)", () => {
+    const p = parseGraphProgram("graph: [[1],[0]]\ngraph_edge:0:1:label:a\\nb");
+    expect(frameAt(p, p.stepCount - 1).main.edges["0->1"]).toEqual({ label: "a\\nb" });
+  });
 });
 
 describe("strict decimal index parsing", () => {
