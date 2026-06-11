@@ -75,6 +75,12 @@ describe("graph_node directives + frameAt", () => {
     expect(p.events[1]).toMatchObject({ attr: "info", value: "a:b:c" });
   });
 
+  it("converts a literal \\n in info to a real newline", () => {
+    // The stdout line carries the two characters backslash + n.
+    const p = parseGraphProgram("graph: [[]]\ngraph_node:0:info:line1\\nline2");
+    expect(p.events[1]).toMatchObject({ attr: "info", value: "line1\nline2" });
+  });
+
   it("ignores out-of-range node and bad color (not counted as steps)", () => {
     const p = parseGraphProgram(
       "graph: [[1],[0]]\ngraph_node:5:color:1\ngraph_node:0:color:99"

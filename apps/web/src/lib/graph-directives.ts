@@ -110,7 +110,16 @@ function parseNodeLine(
     return { kind: "node", id, node, attr: "color", value: PALETTE[c - 1]! };
   }
   if (attr === "info") {
-    return { kind: "node", id, node, attr: "info", value };
+    // Support line breaks: a literal "\n" in the printed text becomes a real
+    // newline in the rendered node label. (Python's own \n would split the
+    // stdout line and never reach here, so users print a literal backslash-n.)
+    return {
+      kind: "node",
+      id,
+      node,
+      attr: "info",
+      value: value.replace(/\\n/g, "\n"),
+    };
   }
   return null;
 }
