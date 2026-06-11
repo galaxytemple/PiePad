@@ -135,9 +135,11 @@ jobs:
 
           NEXT_PUBLIC_WS_URL=wss://${{ secrets.PUBLIC_HOST }}/yjs
           WS_INTERNAL_URL=http://ws:1234
-          # Piston runs co-located on this box (compose `runtime` profile),
-          # reached over the internal docker network.
-          PISTON_URL=http://piston:2000/api/v2
+          # Piston runs co-located on this box (compose `runtime` profile).
+          # Set the PISTON_URL secret to http://piston:2000/api/v2 (the internal
+          # docker-network address). If the secret is empty, the compose default
+          # (${PISTON_URL:-http://piston:2000/api/v2}) falls back to the same.
+          PISTON_URL=${{ secrets.PISTON_URL }}
 
           BCRYPT_ROUNDS=12
           RUN_RATE_LIMIT_PER_MINUTE=10
