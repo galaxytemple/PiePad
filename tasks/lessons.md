@@ -509,3 +509,51 @@ start of related work to avoid repeating the same mistakes.
     `pickStringOrNull`) so a missing key never crashes the route.
   Now obsolete since we self-host, but keep the guards — they're cheap
   and protect against any future upstream wobble.
+
+## CI/CD & Deploy (2026-06-11)
+
+### Build images in CI, never on a 1GB production box
+
+- **Symptom**: `배포가 안되네` — `docker compose up --build` on the OCI
+  E2.1.Micro (1GB) compiled Next.js for ~7.7 min and the deploy SSH session
+  died mid-build (`client_loop: send disconnect: Broken pipe`).
+- **Fix**: build `web`/`ws`/`cleanup` in GitHub Actions (4 vCPU/16GB runner),
+  push to GHCR, and on the box only `docker compose pull && up -d`. The box
+  never compiles. GitHub-hosted runners are far bigger than the free VM.
+
+### `docker/build-push-action` needs `push: true`
+
+- Default is `push: false` — it builds but does NOT push. The box's later
+  `docker compose pull` then fails with `manifest/reference not found`. Always
+  set `push: true` when publishing to a registry. (Cost us one deploy cycle.)
+
+### Piston is amd64-only — an ARM A1 cannot host it
+
+- `ghcr.io/engineer-man/piston` and its language packages have no arm64 build.
+  On an OCI A1 (Ampere/ARM) the container crashes with `exec format error`.
+  Piston must stay on the x86 box. We reverted an A1 split and co-located it on
+  the E2 via the compose `runtime` profile.
+
+### `PISTON_URL` inside compose uses the service name, not 127.0.0.1
+
+- From inside the `web` container, `127.0.0.1:2000` is the web container
+  itself → `piston_unreachable`. Use the docker network service name:
+  `http://piston:2000/api/v2`. The host-loopback publish (`127.0.0.1:2000`)
+  is only so the box itself can run `install-piston-langs.sh`.
+
+### Piston ships with zero languages — install once, persists in a volume
+
+- After first `up`, no runtimes exist (`"python-* runtime is unknown"`).
+  Install via the package API (`scripts/install-piston-langs.sh`); the
+  `piston_packages` named volume keeps them across redeploys.
+
+## React / Next.js
+
+### eslint-plugin-react-hooks v7 forbids setState-in-effect & ref-in-render
+
+- v7 (React Compiler-aware) rejects "reset state in a useEffect when a prop
+  changes" and reading `ref.current` during render. To reset child state when a
+  prop changes, give the child a `key` derived from that prop (parent re-mounts
+  it) instead of an effect. For a genuinely-safe ref read during render
+  (re-render guaranteed by a co-located state update), a narrowly-scoped
+  `// eslint-disable-next-line react-hooks/refs` with a why-comment is fine.

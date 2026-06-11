@@ -155,6 +155,11 @@ export function PadEditorInner({
 
   return (
     <div className="flex h-screen flex-col">
+      {/* providerRef is populated in useYjsEditor's mount effect, whose
+          setUsers/meta state updates immediately force a re-render that
+          re-reads the now-populated ref — so the cursor styles still mount.
+          react-hooks/refs is conservative for this guaranteed-re-render case. */}
+      {/* eslint-disable-next-line react-hooks/refs */}
       <RemoteCursorStyles provider={providerRef.current} roomId={roomId} />
       <header className="flex items-center justify-between border-b border-divider bg-content1 px-6 py-3">
         <div className="flex items-center gap-3">
