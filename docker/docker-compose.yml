@@ -34,13 +34,12 @@ services:
     mem_limit: 128m
 
   web:
-    build:
-      context: ../
-      dockerfile: ./docker/web.Dockerfile
-      # NEXT_PUBLIC_* must reach the build stage so Next.js can inline them
-      # into the client JS bundle. env_file only covers runtime.
-      args:
-        NEXT_PUBLIC_WS_URL: "${NEXT_PUBLIC_WS_URL}"
+    # Image is built and pushed by CI (.github/workflows/deploy.yml) — the
+    # small prod box no longer compiles Next.js (that broke the deploy SSH
+    # pipe). NEXT_PUBLIC_* are baked into this image at CI build time via a
+    # build-arg, so they are NOT set here. IMAGE_TAG is the commit SHA in
+    # prod (written into .env by CI); falls back to `latest`.
+    image: ghcr.io/galaxytemple/piepad-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file:
       - ../.env
@@ -74,9 +73,7 @@ services:
     mem_limit: 384m
 
   ws:
-    build:
-      context: ../
-      dockerfile: ./docker/ws.Dockerfile
+    image: ghcr.io/galaxytemple/piepad-ws:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file:
       - ../.env
@@ -95,9 +92,7 @@ services:
     mem_limit: 256m
 
   cleanup:
-    build:
-      context: ../
-      dockerfile: ./docker/cleanup.Dockerfile
+    image: ghcr.io/galaxytemple/piepad-cleanup:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file:
       - ../.env

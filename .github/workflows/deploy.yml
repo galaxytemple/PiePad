@@ -10,12 +10,82 @@ concurrency:
   cancel-in-progress: false # never abort a half-finished deploy
 
 jobs:
-  deploy:
+  # ---------------------------------------------------------------------------
+  # Build the app images on a GitHub-hosted runner (4 vCPU / 16 GB) and push to
+  # GHCR. The 1 GB prod box can't compile Next.js without the deploy SSH pipe
+  # breaking, so the box never builds — it only pulls (see deploy-web).
+  # The web box is x86_64 (E2.1.Micro), so we build linux/amd64 natively.
+  # ---------------------------------------------------------------------------
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 25
-
+    permissions:
+      contents: read
+      packages: write
     steps:
-      # The runner has the source; the VM never talks to GitHub.
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/web.Dockerfile
+          platforms: linux/amd64
+          # NEXT_PUBLIC_* must be inlined at build time (Next.js bakes them into
+          # the client bundle). Derived from the PUBLIC_HOST secret.
+          build-args: |
+            NEXT_PUBLIC_WS_URL=wss://${{ secrets.PUBLIC_HOST }}/yjs
+          tags: |
+            ghcr.io/galaxytemple/piepad-web:${{ github.sha }}
+            ghcr.io/galaxytemple/piepad-web:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+      - name: Build & push ws
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/ws.Dockerfile
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/galaxytemple/piepad-ws:${{ github.sha }}
+            ghcr.io/galaxytemple/piepad-ws:latest
+          cache-from: type=gha,scope=ws
+          cache-to: type=gha,mode=max,scope=ws
+
+      - name: Build & push cleanup
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/cleanup.Dockerfile
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/galaxytemple/piepad-cleanup:${{ github.sha }}
+            ghcr.io/galaxytemple/piepad-cleanup:latest
+          cache-from: type=gha,scope=cleanup
+          cache-to: type=gha,mode=max,scope=cleanup
+
+  # ---------------------------------------------------------------------------
+  # Sync compose/config + a freshly-built .env to the web box, then pull the
+  # images CI just pushed and restart. No building happens on the box.
+  # ---------------------------------------------------------------------------
+  deploy-web:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read # GITHUB_TOKEN pulls the private images on the box
+    steps:
       - uses: actions/checkout@v4
 
       - name: Configure SSH
@@ -24,64 +94,31 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
           set -e
-
-          if [ -z "${DEPLOY_HOST:-}" ]; then
-            echo "::error::DEPLOY_HOST secret is empty"; exit 1
-          fi
-          if [ -z "${DEPLOY_SSH_KEY:-}" ]; then
-            echo "::error::DEPLOY_SSH_KEY secret is empty"; exit 1
-          fi
-
+          if [ -z "${DEPLOY_HOST:-}" ]; then echo "::error::DEPLOY_HOST empty"; exit 1; fi
+          if [ -z "${DEPLOY_SSH_KEY:-}" ]; then echo "::error::DEPLOY_SSH_KEY empty"; exit 1; fi
           mkdir -p ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
           chmod 600 ~/.ssh/deploy
-
-          # Sanity-check the private key shape without leaking the body
           if ! grep -q -- '-----BEGIN' ~/.ssh/deploy; then
-            echo "::error::DEPLOY_SSH_KEY does not look like a PEM private key (missing BEGIN line)"
-            exit 1
+            echo "::error::DEPLOY_SSH_KEY does not look like a PEM private key"; exit 1
           fi
-          echo "Key first line: $(head -1 ~/.ssh/deploy)"
-          echo "Key last line:  $(tail -1 ~/.ssh/deploy)"
-          echo "Key line count: $(wc -l < ~/.ssh/deploy)"
-
-          # Direct TCP probe first — distinguishes network/firewall block
-          # from an actual ssh-keyscan failure mode.
-          echo "DEPLOY_HOST length: ${#DEPLOY_HOST}"
-          echo "Runner public IP: $(curl -fsS https://api.ipify.org || echo unknown)"
-
-          echo "TCP 22 via DEPLOY_HOST secret:"
-          nc -vz -w 5 "$DEPLOY_HOST" 22 2>&1 | sed 's/^/  /' || true
-
-          # ssh-keyscan times out at 5s by default; bump it and don't let
-          # `-H` errors silently mask connectivity failures.
           if ! ssh-keyscan -T 15 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2> /tmp/keyscan.err; then
-            echo "::error::ssh-keyscan failed against $DEPLOY_HOST"
-            echo "stderr:"
-            sed 's/^/  /' /tmp/keyscan.err
-            exit 1
+            echo "::error::ssh-keyscan failed against $DEPLOY_HOST"; sed 's/^/  /' /tmp/keyscan.err; exit 1
           fi
-          if [ ! -s ~/.ssh/known_hosts ]; then
-            echo "::error::ssh-keyscan produced no host keys — is port 22 open from GitHub runners?"
-            cat /tmp/keyscan.err
-            exit 1
-          fi
-          echo "known_hosts entries: $(wc -l < ~/.ssh/known_hosts)"
 
-      # Build .env on the runner from Secrets so production credentials never
-      # land in the repo and the VM doesn't need a credential file of its own.
+      # Build .env on the runner from Secrets so prod credentials never land in
+      # the repo. IMAGE_TAG pins the exact images CI just pushed.
       - name: Build .env
         run: |
           cat > .env <<EOF
           PUBLIC_IP=${{ secrets.PUBLIC_IP }}
           PUBLIC_HOST=${{ secrets.PUBLIC_HOST }}
 
+          IMAGE_TAG=${{ github.sha }}
+
           ORACLE_USER=${{ secrets.ORACLE_USER }}
           ORACLE_PASSWORD=${{ secrets.ORACLE_PASSWORD }}
           ORACLE_TNS_NAME=${{ secrets.ORACLE_TNS_NAME }}
-          # Login user and table owner can differ — ORACLE_SCHEMA pins
-          # CURRENT_SCHEMA so unqualified table names resolve into the
-          # owner's schema. Leave the secret empty if both are the same.
           ORACLE_SCHEMA=${{ secrets.ORACLE_SCHEMA }}
           ORACLE_WALLET_DIR=/wallet
           ORACLE_WALLET_PASSWORD=${{ secrets.ORACLE_WALLET_PASSWORD }}
@@ -89,21 +126,13 @@ jobs:
           AUTH_SECRET=${{ secrets.AUTH_SECRET }}
           AUTH_GOOGLE_ID=${{ secrets.AUTH_GOOGLE_ID }}
           AUTH_GOOGLE_SECRET=${{ secrets.AUTH_GOOGLE_SECRET }}
-          # Caddy terminates TLS and reverse-proxies to web:3000, so the
-          # request's Host header is the internal service name. Auth.js v5
-          # otherwise refuses to operate (UntrustedHost) and every auth()
-          # call throws — which on /login produces a bare 302 → / and
-          # creates a redirect loop with the proxy.ts middleware.
           AUTH_TRUST_HOST=true
-          # Canonical public URL used to build OAuth callback / error /
-          # signin redirect URLs. Without this, Auth.js falls back to the
-          # container's listen address (0.0.0.0:3000) when forwarded host
-          # parsing misses, which sends users to broken absolute URLs.
           AUTH_URL=https://${{ secrets.PUBLIC_HOST }}
           ADMIN_EMAILS=${{ secrets.ADMIN_EMAILS }}
 
           NEXT_PUBLIC_WS_URL=wss://${{ secrets.PUBLIC_HOST }}/yjs
           WS_INTERNAL_URL=http://ws:1234
+          # Points at Piston on the A1 box over the private VCN.
           PISTON_URL=${{ secrets.PISTON_URL }}
 
           BCRYPT_ROUNDS=12
@@ -117,9 +146,9 @@ jobs:
           CLEANUP_RUN_ON_START=true
           EOF
 
-      # Push the source + .env to the VM. --delete keeps it in sync with main,
-      # --exclude protects state that lives only on the VM (wallet, runtime
-      # data, build caches).
+      # Sync source + .env. We no longer build on the box, but keeping the repo
+      # in sync is harmless and provides compose/Caddyfile/scripts. Excludes
+      # protect VM-only state (wallet, runtime data).
       - name: Sync to VM
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -136,30 +165,30 @@ jobs:
             --exclude='**/data/' \
             -e "ssh -i ~/.ssh/deploy" \
             ./ "$DEPLOY_USER@$DEPLOY_HOST:/opt/piepad/"
-
           ssh -i ~/.ssh/deploy "$DEPLOY_USER@$DEPLOY_HOST" \
             "chmod 600 /opt/piepad/.env && chmod +x /opt/piepad/scripts/dc /opt/piepad/scripts/install-piston-langs.sh"
 
-      # DB schema is managed manually from a local Flyway run against the
-      # Autonomous DB — the deploy user intentionally lacks CREATE TABLE,
-      # so we never run `flyway migrate` from CI.
-      - name: Build, restart
+      # Log the box into GHCR using the workflow's own GITHUB_TOKEN (valid for
+      # this run, packages:read) so it can pull the private images. If you make
+      # the GHCR packages public, this login becomes unnecessary.
+      - name: Pull & restart
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          GHCR_ACTOR: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          printf '%s' "$GHCR_TOKEN" | ssh -i ~/.ssh/deploy "$DEPLOY_USER@$DEPLOY_HOST" \
+            "docker login ghcr.io -u '$GHCR_ACTOR' --password-stdin"
+
           ssh -i ~/.ssh/deploy "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail
             cd /opt/piepad
-
-            ./scripts/dc up -d --build --remove-orphans
-
-            # The Caddyfile is bind-mounted, so 'up' won't recreate caddy on
-            # config-file edits — only image/compose changes trigger that.
-            # Force a reload so Caddyfile changes land in the same deploy.
+            ./scripts/dc pull
+            ./scripts/dc up -d --remove-orphans
             ./scripts/dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile \
               || ./scripts/dc restart caddy
-
             docker image prune -f
+            docker logout ghcr.io || true
           "
 
       - name: Health check
@@ -168,9 +197,55 @@ jobs:
         run: |
           for i in 1 2 3 4 5; do
             if curl -fsS --max-time 10 "https://${PUBLIC_HOST}/" >/dev/null; then
-              echo "✓ healthy"
-              exit 0
+              echo "✓ healthy"; exit 0
             fi
             sleep 8
           done
           echo "::warning::homepage did not respond within 40s — check ./scripts/dc logs caddy/web"
+
+  # ---------------------------------------------------------------------------
+  # Update Piston on the A1 box. Piston rarely changes, so this runs ONLY on a
+  # manual workflow_dispatch (not on every push). First-time setup is the
+  # one-shot script/a1-piston-bootstrap.sh run directly on the A1 box.
+  # ---------------------------------------------------------------------------
+  deploy-piston:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH (A1)
+        env:
+          PISTON_SSH_KEY: ${{ secrets.PISTON_SSH_KEY }}
+          PISTON_DEPLOY_HOST: ${{ secrets.PISTON_DEPLOY_HOST }}
+        run: |
+          set -e
+          if [ -z "${PISTON_DEPLOY_HOST:-}" ]; then echo "::error::PISTON_DEPLOY_HOST empty"; exit 1; fi
+          if [ -z "${PISTON_SSH_KEY:-}" ]; then echo "::error::PISTON_SSH_KEY empty"; exit 1; fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$PISTON_SSH_KEY" > ~/.ssh/piston
+          chmod 600 ~/.ssh/piston
+          ssh-keyscan -T 15 "$PISTON_DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Sync piston files & restart
+        env:
+          PISTON_DEPLOY_USER: ${{ secrets.PISTON_DEPLOY_USER }}
+          PISTON_DEPLOY_HOST: ${{ secrets.PISTON_DEPLOY_HOST }}
+          A1_PRIVATE_IP: ${{ secrets.A1_PRIVATE_IP }}
+        run: |
+          DEST="$PISTON_DEPLOY_USER@$PISTON_DEPLOY_HOST:/opt/piepad-piston"
+          ssh -i ~/.ssh/piston "$PISTON_DEPLOY_USER@$PISTON_DEPLOY_HOST" \
+            "mkdir -p /opt/piepad-piston/docker /opt/piepad-piston/scripts"
+          scp -i ~/.ssh/piston docker/piston-compose.yml "$DEST/docker/piston-compose.yml"
+          scp -i ~/.ssh/piston scripts/install-piston-langs.sh "$DEST/scripts/install-piston-langs.sh"
+
+          ssh -i ~/.ssh/piston "$PISTON_DEPLOY_USER@$PISTON_DEPLOY_HOST" "set -euo pipefail
+            cd /opt/piepad-piston
+            printf 'PISTON_BIND_IP=%s\n' '$A1_PRIVATE_IP' > .env
+            chmod 600 .env
+            chmod +x scripts/install-piston-langs.sh
+            docker compose --env-file .env -f docker/piston-compose.yml pull
+            docker compose --env-file .env -f docker/piston-compose.yml up -d
+            bash scripts/install-piston-langs.sh \"http://$A1_PRIVATE_IP:2000\"
+          "
