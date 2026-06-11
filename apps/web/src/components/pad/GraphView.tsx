@@ -3,6 +3,7 @@
 import { useTheme } from "next-themes";
 import { useMemo, useState } from "react";
 import { clampStep, frameAt } from "@/lib/graph-directives";
+import { PALETTE } from "@/components/pad/types";
 import type { GraphProgram, SingleGraphState } from "./graph-types";
 import { type LayoutName, useCytoscapeGraph } from "./useCytoscapeGraph";
 
@@ -10,12 +11,19 @@ const USAGE = `print directives in your Python code:
   graph: [[1,2],[1],[2]]            define a directed graph (adjacency list)
   graph:undirected: [[1],[0]]       undirected graph
   tree: [1,2,3,null,null,4,5]       binary tree (LeetCode level-order; null/None)
-  graph_node:0:color:1              colour node 0 (1..16)
+  graph_node:0:color:1              colour node 0 (1..16 — see swatches below)
   graph_node:0:info:a\\nb           label under node 0 (\\n = line break)
   graph_edge:0:1:color:3            colour edge 0->1
   graph_edge:0:1:label:w=5          label edge 0->1 (weights)
   graph@g2:...  graph_node@g2:...   multiple graphs via @id
 Tip: click the panel, then use ← / → to step.`;
+
+// Names line up 1:1 with PALETTE (index 0 = colour number 1). Shown as a legend
+// in the help panel so users know which number maps to which colour.
+const COLOR_NAMES = [
+  "red", "orange", "amber", "yellow", "lime", "green", "emerald", "teal",
+  "cyan", "sky", "blue", "indigo", "violet", "purple", "fuchsia", "pink",
+] as const;
 
 function GraphCanvas({
   state,
@@ -32,7 +40,7 @@ function GraphCanvas({
       <div className="px-2 py-1 font-mono text-[11px] text-default-500">
         [@{state.id}] {state.mode}
       </div>
-      <div ref={containerRef} className="h-56 w-full" />
+      <div ref={containerRef} className="h-96 w-full" />
     </div>
   );
 }
@@ -91,9 +99,27 @@ export function GraphView({ program }: { program: GraphProgram }) {
       </div>
 
       {showHelp ? (
-        <pre className="whitespace-pre-wrap border-b border-divider bg-content2 px-2 py-1 font-mono text-[10px] text-default-600">
-          {USAGE}
-        </pre>
+        <div className="border-b border-divider bg-content2">
+          <pre className="whitespace-pre-wrap px-2 pt-1 font-mono text-[10px] text-default-600">
+            {USAGE}
+          </pre>
+          {/* colour number -> colour mapping (1..16) */}
+          <div className="flex flex-wrap gap-x-2 gap-y-1 px-2 pb-2 pt-1">
+            {PALETTE.map((hex, i) => (
+              <span
+                key={hex}
+                title={COLOR_NAMES[i]}
+                className="flex items-center gap-1 font-mono text-[10px] text-default-600"
+              >
+                <span
+                  className="inline-block h-3 w-3 rounded-sm border border-divider"
+                  style={{ background: hex }}
+                />
+                {i + 1} {COLOR_NAMES[i]}
+              </span>
+            ))}
+          </div>
+        </div>
       ) : null}
 
       {program.warnings.length > 0 ? (
