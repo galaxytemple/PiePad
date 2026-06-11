@@ -9,11 +9,12 @@ import { type LayoutName, useCytoscapeGraph } from "./useCytoscapeGraph";
 const USAGE = `print directives in your Python code:
   graph: [[1,2],[1],[2]]            define a directed graph (adjacency list)
   graph:undirected: [[1],[0]]       undirected graph
+  tree: [1,2,3,null,null,4,5]       binary tree (LeetCode level-order; null/None)
   graph_node:0:color:1              colour node 0 (1..16)
   graph_node:0:info:a\\nb           label under node 0 (\\n = line break)
   graph_edge:0:1:color:3            colour edge 0->1
   graph_edge:0:1:label:w=5          label edge 0->1 (weights)
-  graph@tree:...  graph_node@tree:..multiple graphs via @id
+  graph@g2:...  graph_node@g2:...   multiple graphs via @id
 Tip: click the panel, then use ← / → to step.`;
 
 function GraphCanvas({

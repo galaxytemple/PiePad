@@ -36,7 +36,10 @@ function toElements(s: SingleGraphState): ElementDefinition[] {
           label: deco.label ?? "",
           color: deco.color ?? "",
         },
-        classes: s.mode === "undirected" ? "undirected" : "",
+        // tree edges are parent->child lines without arrowheads, same as
+        // undirected for arrow purposes.
+        classes:
+          s.mode === "undirected" || s.mode === "tree" ? "undirected" : "",
       });
     });
   });
@@ -128,7 +131,17 @@ export function useCytoscapeGraph(
     cy.style(buildStyle(isDark));
     const structureKey = `${state.mode}:${JSON.stringify(state.adjacency)}`;
     if (structureKey !== structureKeyRef.current) {
-      cy.layout({ name: layout, padding: 12 }).run();
+      // Trees get a fixed root (node 0) so they lay out top-down; other modes
+      // let breadthfirst auto-pick roots. `roots` is only meaningful for
+      // breadthfirst (the current fixed layout) — guard so a future
+      // layout-picker can't silently pass it to cose/circle/grid.
+      const layoutOpts =
+        state.mode === "tree" &&
+        layout === "breadthfirst" &&
+        state.adjacency.length > 0
+          ? { name: layout, padding: 12, roots: ["n0"] }
+          : { name: layout, padding: 12 };
+      cy.layout(layoutOpts as cytoscape.LayoutOptions).run();
       structureKeyRef.current = structureKey;
     }
   }, [state, layout, isDark]);

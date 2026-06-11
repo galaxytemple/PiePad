@@ -1,6 +1,6 @@
 // Visual model for the graph view. color is a resolved PALETTE hex string
 // (the 1..16 index is resolved to hex at parse time).
-export type GraphMode = "directed" | "undirected";
+export type GraphMode = "directed" | "undirected" | "tree";
 
 export interface NodeDeco {
   color?: string;
