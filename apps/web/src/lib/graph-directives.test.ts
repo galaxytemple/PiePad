@@ -41,15 +41,13 @@ describe("graph_node directives + frameAt", () => {
       kind: "node",
       id: "main",
       node: 0,
-      attr: "color",
-      value: PALETTE[0],
+      deco: { color: PALETTE[0] },
     });
     expect(p.events[2]).toEqual({
       kind: "node",
       id: "main",
       node: 0,
-      attr: "info",
-      value: "children 1",
+      deco: { info: "children 1" },
     });
   });
 
@@ -72,13 +70,13 @@ describe("graph_node directives + frameAt", () => {
 
   it("info text may contain colons", () => {
     const p = parseGraphProgram("graph: [[]]\ngraph_node:0:info:a:b:c");
-    expect(p.events[1]).toMatchObject({ attr: "info", value: "a:b:c" });
+    expect(p.events[1]).toMatchObject({ deco: { info: "a:b:c" } });
   });
 
   it("converts a literal \\n in info to a real newline", () => {
     // The stdout line carries the two characters backslash + n.
     const p = parseGraphProgram("graph: [[]]\ngraph_node:0:info:line1\\nline2");
-    expect(p.events[1]).toMatchObject({ attr: "info", value: "line1\nline2" });
+    expect(p.events[1]).toMatchObject({ deco: { info: "line1\nline2" } });
   });
 
   it("ignores out-of-range node and bad color (not counted as steps)", () => {
@@ -109,7 +107,7 @@ describe("graph_edge directives", () => {
     );
     expect(p.stepCount).toBe(3);
     expect(p.events[1]).toEqual({
-      kind: "edge", id: "main", src: 0, dst: 1, attr: "color", value: PALETTE[2],
+      kind: "edge", id: "main", src: 0, dst: 1, deco: { color: PALETTE[2] },
     });
     const s = frameAt(p, 2);
     expect(s.main.edges["0->1"]).toEqual({ color: PALETTE[2], label: "w=5" });
@@ -253,6 +251,64 @@ describe("undirected edge keys remain directional in state", () => {
     const s = frameAt(p, p.stepCount - 1);
     expect(s.main.edges["0->1"]).toEqual({ color: PALETTE[0] });
     expect(s.main.edges["1->0"]).toBeUndefined();
+  });
+});
+
+describe("combined attributes in one directive", () => {
+  it("sets node color + info in a single event/step", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_node:0:color:6:info:hello");
+    expect(p.stepCount).toBe(2);
+    expect(p.events[1]).toEqual({
+      kind: "node",
+      id: "main",
+      node: 0,
+      deco: { color: PALETTE[5], info: "hello" },
+    });
+    expect(frameAt(p, 1).main.nodes[0]).toEqual({ color: PALETTE[5], info: "hello" });
+  });
+
+  it("sets edge color + label in one event", () => {
+    const p = parseGraphProgram("graph: [[1],[0]]\ngraph_edge:0:1:color:3:label:w=5");
+    expect(frameAt(p, p.stepCount - 1).main.edges["0->1"]).toEqual({
+      color: PALETTE[2],
+      label: "w=5",
+    });
+  });
+
+  it("terminal info keeps colons after a color pair", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_node:0:color:1:info:a:b");
+    expect(frameAt(p, 1).main.nodes[0]).toEqual({ color: PALETTE[0], info: "a:b" });
+  });
+
+  it("last color wins when repeated before info", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_node:0:color:1:color:2:info:x");
+    expect(frameAt(p, 1).main.nodes[0]).toEqual({ color: PALETTE[1], info: "x" });
+  });
+
+  it("converts literal \\n in combined info", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_node:0:color:1:info:a\\nb");
+    expect(frameAt(p, 1).main.nodes[0]).toEqual({ color: PALETTE[0], info: "a\nb" });
+  });
+
+  it("empty terminal info is allowed", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_node:0:color:1:info:");
+    expect(frameAt(p, 1).main.nodes[0]).toEqual({ color: PALETTE[0], info: "" });
+  });
+
+  it("ignores the whole line on a bad part", () => {
+    expect(parseGraphProgram("graph: [[]]\ngraph_node:0:color:99:info:x").stepCount).toBe(1);
+    expect(parseGraphProgram("graph: [[]]\ngraph_node:0:foo:1").stepCount).toBe(1);
+    expect(parseGraphProgram("graph: [[]]\ngraph_node:0:color:").stepCount).toBe(1);
+    expect(parseGraphProgram("graph: [[]]\ngraph_node:0").stepCount).toBe(1);
+  });
+
+  it("rejects color:0 (palette index is 1-based)", () => {
+    expect(parseGraphProgram("graph: [[]]\ngraph_node:0:color:0").stepCount).toBe(1);
+  });
+
+  it("does NOT convert literal \\n in an edge label (only node info does)", () => {
+    const p = parseGraphProgram("graph: [[1],[0]]\ngraph_edge:0:1:label:a\\nb");
+    expect(frameAt(p, p.stepCount - 1).main.edges["0->1"]).toEqual({ label: "a\\nb" });
   });
 });
 

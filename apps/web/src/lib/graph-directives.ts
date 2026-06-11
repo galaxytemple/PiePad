@@ -1,9 +1,11 @@
 import { PALETTE } from "@/components/pad/types";
 import type {
+  EdgeDeco,
   GraphEvent,
   GraphMode,
   GraphProgram,
   MultiGraphState,
+  NodeDeco,
   SingleGraphState,
 } from "@/components/pad/graph-types";
 
@@ -16,19 +18,42 @@ function parseIndex(s: string): number | null {
   return /^\d+$/.test(s.trim()) ? Number(s) : null;
 }
 
-// Split `s` on `sep` into at most `max` parts; the final part keeps any
-// remaining separators (so info/label text may contain colons).
-function splitMax(s: string, sep: string, max: number): string[] {
-  const parts: string[] = [];
-  let rest = s;
-  while (parts.length < max - 1) {
-    const i = rest.indexOf(sep);
-    if (i === -1) break;
-    parts.push(rest.slice(0, i));
-    rest = rest.slice(i + sep.length);
+// Parse a chain of `attr:value` pairs. `color` consumes one numeric token
+// (1..16 -> PALETTE hex); the terminal attr (`info`/`label`) consumes the rest
+// of the line (so it may contain colons). Returns null on any invalid/unknown
+// part, a missing value, or if no attribute was set. `convertNewlines` turns a
+// literal "\n" in the terminal value into a real newline (node info only).
+function parseDecoChain(
+  rest: string,
+  terminalAttr: "info" | "label",
+  convertNewlines: boolean
+): Record<string, string> | null {
+  const deco: Record<string, string> = {};
+  let s = rest;
+  let any = false;
+  while (s.length > 0) {
+    const colon = s.indexOf(":");
+    if (colon === -1) return null; // attr without a value
+    const attr = s.slice(0, colon);
+    const after = s.slice(colon + 1);
+    if (attr === terminalAttr) {
+      deco[attr] = convertNewlines ? after.replace(/\\n/g, "\n") : after;
+      any = true;
+      break;
+    }
+    if (attr === "color") {
+      const next = after.indexOf(":");
+      const token = next === -1 ? after : after.slice(0, next);
+      const c = parseIndex(token);
+      if (c === null || c < 1 || c > 16) return null;
+      deco.color = PALETTE[c - 1]!;
+      any = true;
+      s = next === -1 ? "" : after.slice(next + 1);
+      continue;
+    }
+    return null; // unknown attr
   }
-  parts.push(rest);
-  return parts;
+  return any ? deco : null;
 }
 
 function parseHead(head: string): { kw: string; id: string } | null {
@@ -98,30 +123,18 @@ function parseNodeLine(
 ): GraphEvent | null {
   const adj = structures.get(id);
   if (!adj) return null; // node before graph for this id
-  const parts = splitMax(body, ":", 3); // [node, attr, value]
-  if (parts.length < 3) return null;
-  const node = parseIndex(parts[0]!);
+  const colon = body.indexOf(":");
+  if (colon === -1) return null;
+  const node = parseIndex(body.slice(0, colon));
   if (node === null || node >= adj.length) return null;
-  const attr = parts[1];
-  const value = parts[2];
-  if (attr === "color") {
-    const c = parseIndex(value);
-    if (c === null || c < 1 || c > 16) return null;
-    return { kind: "node", id, node, attr: "color", value: PALETTE[c - 1]! };
-  }
-  if (attr === "info") {
-    // Support line breaks: a literal "\n" in the printed text becomes a real
-    // newline in the rendered node label. (Python's own \n would split the
-    // stdout line and never reach here, so users print a literal backslash-n.)
-    return {
-      kind: "node",
-      id,
-      node,
-      attr: "info",
-      value: value.replace(/\\n/g, "\n"),
-    };
-  }
-  return null;
+  const chain = parseDecoChain(body.slice(colon + 1), "info", true);
+  if (!chain) return null;
+  // Build the typed deco from known keys (avoids an unsound `as` cast that
+  // would let a future stray key slip through unchecked).
+  const deco: NodeDeco = {};
+  if (chain.color !== undefined) deco.color = chain.color;
+  if (chain.info !== undefined) deco.info = chain.info;
+  return { kind: "node", id, node, deco };
 }
 
 function parseEdgeLine(
@@ -131,22 +144,22 @@ function parseEdgeLine(
 ): GraphEvent | null {
   const adj = structures.get(id);
   if (!adj) return null;
-  const parts = splitMax(body, ":", 4); // [src, dst, attr, value]
-  if (parts.length < 4) return null;
-  const srcN = parseIndex(parts[0]!);
-  const dstN = parseIndex(parts[1]!);
-  if (srcN === null || dstN === null || srcN >= adj.length || dstN >= adj.length) return null;
-  const attr = parts[2];
-  const value = parts[3];
-  if (attr === "color") {
-    const c = parseIndex(value);
-    if (c === null || c < 1 || c > 16) return null;
-    return { kind: "edge", id, src: srcN, dst: dstN, attr: "color", value: PALETTE[c - 1]! };
+  const c1 = body.indexOf(":");
+  if (c1 === -1) return null;
+  const srcN = parseIndex(body.slice(0, c1));
+  const after = body.slice(c1 + 1);
+  const c2 = after.indexOf(":");
+  if (c2 === -1) return null;
+  const dstN = parseIndex(after.slice(0, c2));
+  if (srcN === null || dstN === null || srcN >= adj.length || dstN >= adj.length) {
+    return null;
   }
-  if (attr === "label") {
-    return { kind: "edge", id, src: srcN, dst: dstN, attr: "label", value };
-  }
-  return null;
+  const chain = parseDecoChain(after.slice(c2 + 1), "label", false);
+  if (!chain) return null;
+  const deco: EdgeDeco = {};
+  if (chain.color !== undefined) deco.color = chain.color;
+  if (chain.label !== undefined) deco.label = chain.label;
+  return { kind: "edge", id, src: srcN, dst: dstN, deco };
 }
 
 // Decode a LeetCode level-order binary-tree array into a children adjacency
@@ -295,11 +308,11 @@ function applyEvent(state: MultiGraphState, ev: GraphEvent): void {
   const g = state[ev.id];
   if (!g) return; // validated unreachable, defensive
   if (ev.kind === "node") {
-    g.nodes[ev.node] = { ...(g.nodes[ev.node] ?? {}), [ev.attr]: ev.value };
+    g.nodes[ev.node] = { ...(g.nodes[ev.node] ?? {}), ...ev.deco };
   }
   if (ev.kind === "edge") {
     const key = `${ev.src}->${ev.dst}`;
-    g.edges[key] = { ...(g.edges[key] ?? {}), [ev.attr]: ev.value };
+    g.edges[key] = { ...(g.edges[key] ?? {}), ...ev.deco };
   }
 }
 
