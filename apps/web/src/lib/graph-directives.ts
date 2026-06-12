@@ -240,7 +240,9 @@ function parseTreeLine(
 }
 
 // parseLine yields either a timeline event or a panel message instruction.
-// The `info` variant is internal — it never enters `GraphProgram.events`.
+// The `info` variant is internal — it never enters `GraphProgram.events`. Its
+// `kind` must stay distinct from every GraphEvent kind ("graph"/"node"/"edge")
+// since parseGraphProgram dispatches on it.
 type ParseResult = GraphEvent | { kind: "info"; text: string };
 
 // `structures` is a local accumulator tracking each id's current adjacency so

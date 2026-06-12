@@ -410,6 +410,12 @@ describe("graph_info: panel message", () => {
     const p = parseGraphProgram("graph: [[]]\ngraph_info@x: hi");
     expect(p.messages[0]).toBe("hi");
   });
+
+  it("attaches to a preceding tree: step too", () => {
+    const p = parseGraphProgram("tree: [1,2,3]\ngraph_info: rooted");
+    expect(p.stepCount).toBe(1);
+    expect(p.messages[0]).toBe("rooted");
+  });
 });
 
 describe("stripGraphDirectives removes graph_info too", () => {
