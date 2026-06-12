@@ -15,7 +15,7 @@ const USAGE = `print directives in your Python code:
   graph_node:0:info:a\\nb           label under node 0 (\\n = line break)
   graph_edge:0:1:color:3            colour edge 0->1
   graph_edge:0:1:label:w=5          label edge 0->1 (weights)
-  graph_info: visiting node 0       bottom message for the previous step (no new step)
+  graph_info: visiting node 0       message under the graph header for the prev step (no new step)
   graph@g2:...  graph_node@g2:...   multiple graphs via @id
 Tip: click the panel, then use ← / → to step.`;
 
