@@ -157,6 +157,10 @@ services:
       # passes (RUN_TIMEOUT_MS / COMPILE_TIMEOUT_MS) or Piston returns 400.
       PISTON_RUN_TIMEOUT: "30000"
       PISTON_COMPILE_TIMEOUT: "30000"
+      # Max bytes Piston keeps per stream before it 400s with
+      # "stdout length exceeded". Default is a tiny 1024 B, which graph/tree
+      # directive dumps blow past easily — raise to 1 MiB.
+      PISTON_OUTPUT_MAX_SIZE: "1048576"
     volumes:
       - piston_packages:/piston/packages
     # nsjail bind-mounts /piston/jobs and needs an `exec`-capable filesystem
