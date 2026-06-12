@@ -114,3 +114,25 @@ deco.color = hex;              // hex, or "" for color:0 (default)
 - User-defined / runtime-registered aliases (built-in fixed set only).
 - Per-node vs per-edge alias namespaces (all global).
 - Changing the existing 1–16 PALETTE.
+
+---
+
+## 9. `info` / `label` synonym (added in the same change)
+
+A directive's terminal text attribute accepts **both `info` and `label`** on
+node AND edge directives — the text is stored under the element's canonical key
+(node → `info`, edge → `label`). So `graph_edge:u:v:info:critical` sets the
+edge's label, and `graph_node:0:label:x` sets the node's info. This removes a
+footgun where `graph_edge:...:info:...` was silently ignored (edges only knew
+`label`), which also nuked a preceding `color:` in the same combined directive.
+
+Newline conversion stays per-element (node info converts a literal `\n`; edge
+does not), independent of which name was written.
+
+**Implementation:** in `parseDecoChain`, the terminal branch matches
+`attr === "info" || attr === "label"` and writes `deco[terminalAttr]` (the
+canonical key for that element).
+
+**Tests:** `graph_edge:0:1:info:crit` → edge label `crit`;
+`graph_node:0:label:x` → node info `x`; `graph_edge:0:1:color:16:info:crit` →
+edge `{color: PALETTE[15], label: "crit"}` (color no longer lost).
