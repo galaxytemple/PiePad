@@ -239,6 +239,12 @@ function parseTreeLine(
   return { kind: "graph", id, mode: "tree", adjacency };
 }
 
+// parseLine yields either a timeline event or a panel message instruction.
+// The `info` variant is internal — it never enters `GraphProgram.events`. Its
+// `kind` must stay distinct from every GraphEvent kind ("graph"/"node"/"edge")
+// since parseGraphProgram dispatches on it.
+type ParseResult = GraphEvent | { kind: "info"; text: string };
+
 // `structures` is a local accumulator tracking each id's current adjacency so
 // node/edge directives can be range-validated against the graph in effect at
 // that point in the stream. Mutating it during this forward pass is local
@@ -247,7 +253,7 @@ function parseLine(
   raw: string,
   structures: Map<string, number[][]>,
   warnings: string[]
-): GraphEvent | null {
+): ParseResult | null {
   const line = raw.trim();
   if (!line.startsWith("graph") && !line.startsWith("tree")) return null;
   const firstColon = line.indexOf(":");
@@ -261,18 +267,30 @@ function parseLine(
   if (kw === "graph_node") return parseNodeLine(id, body, structures);
   if (kw === "graph_edge") return parseEdgeLine(id, body, structures);
   if (kw === "tree") return parseTreeLine(id, body, structures, warnings);
+  // graph_info: panel-bottom narration. @id (in `id`) is ignored — the message
+  // is panel-global. trimStart drops the conventional space in "graph_info: hi".
+  if (kw === "graph_info") {
+    return { kind: "info", text: body.trimStart().replace(/\\n/g, "\n") };
+  }
   return null;
 }
 
 export function parseGraphProgram(stdout: string): GraphProgram {
   const events: GraphEvent[] = [];
   const warnings: string[] = [];
+  const messages: Record<number, string> = {};
   const structures = new Map<string, number[][]>();
   for (const raw of stdout.split("\n")) {
-    const ev = parseLine(raw, structures, warnings);
-    if (ev) events.push(ev);
+    const result = parseLine(raw, structures, warnings);
+    if (!result) continue;
+    if (result.kind === "info") {
+      // Attach to the previous step; ignore if no event has been emitted yet.
+      if (events.length > 0) messages[events.length - 1] = result.text;
+      continue;
+    }
+    events.push(result);
   }
-  return { events, stepCount: events.length, warnings };
+  return { events, stepCount: events.length, warnings, messages };
 }
 
 export function clampStep(index: number, stepCount: number): number {
@@ -318,7 +336,7 @@ function applyEvent(state: MultiGraphState, ev: GraphEvent): void {
 
 // Matches the directive keyword shape (with optional @id). Strips even invalid
 // directives so stdout stays clean; validity is surfaced via the graph panel.
-const DIRECTIVE_RE = /^(graph(_node|_edge)?|tree)(@[A-Za-z0-9_-]+)?:/;
+const DIRECTIVE_RE = /^(graph(_node|_edge|_info)?|tree)(@[A-Za-z0-9_-]+)?:/;
 
 export function stripGraphDirectives(stdout: string): string {
   return stdout

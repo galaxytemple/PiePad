@@ -31,4 +31,7 @@ export interface GraphProgram {
   events: GraphEvent[];
   stepCount: number; // = events.length
   warnings: string[];
+  // graph_info: <text> lines attach a panel-bottom message to a step index
+  // (the directive that preceded them). Not every step has a message.
+  messages: Record<number, string>;
 }

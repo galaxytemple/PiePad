@@ -378,3 +378,57 @@ describe("tree: directive (binary tree array)", () => {
     expect(p.warnings.some((w) => w.includes("max 500"))).toBe(true);
   });
 });
+
+describe("graph_info: panel message", () => {
+  it("attaches to the previous step without adding a step", () => {
+    const p = parseGraphProgram(
+      "graph: [[]]\ngraph_node:0:color:1\ngraph_info: visiting 0"
+    );
+    expect(p.stepCount).toBe(2); // graph + node, NOT 3
+    expect(p.messages[1]).toBe("visiting 0");
+  });
+
+  it("trims the conventional leading space and converts \\n", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_info: a\\nb");
+    expect(p.messages[0]).toBe("a\nb");
+  });
+
+  it("last graph_info wins for the same step", () => {
+    const p = parseGraphProgram(
+      "graph: [[]]\ngraph_info: first\ngraph_info: second"
+    );
+    expect(p.messages[0]).toBe("second");
+  });
+
+  it("ignores graph_info before any event", () => {
+    const p = parseGraphProgram("graph_info: nothing yet\ngraph: [[]]");
+    expect(p.stepCount).toBe(1);
+    expect(p.messages).toEqual({});
+  });
+
+  it("ignores the @id on graph_info (panel-global)", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_info@x: hi");
+    expect(p.messages[0]).toBe("hi");
+  });
+
+  it("attaches to a preceding tree: step too", () => {
+    const p = parseGraphProgram("tree: [1,2,3]\ngraph_info: rooted");
+    expect(p.stepCount).toBe(1);
+    expect(p.messages[0]).toBe("rooted");
+  });
+});
+
+describe("stripGraphDirectives removes graph_info too", () => {
+  it("strips graph_info: and graph_info@x: lines, keeps a plain info: log", () => {
+    const stdout = [
+      "start",
+      "graph_info: hello",
+      "graph_info@x: hi",
+      "info: a normal log line",
+      "end",
+    ].join("\n");
+    expect(stripGraphDirectives(stdout)).toBe(
+      "start\ninfo: a normal log line\nend"
+    );
+  });
+});

@@ -64,12 +64,13 @@ export function GraphView({ program }: { program: GraphProgram }) {
   const state = useMemo(() => frameAt(program, step), [program, step]);
   const ids = Object.keys(state);
   const currentEvent = program.events[step];
-  // Shows the info annotation from this specific step's event (not the node's
-  // accumulated state) — e.g. a `color:6:info:hello` directive surfaces "hello".
-  const infoLine =
+  // The bottom footer shows the step's graph_info: narration if present;
+  // otherwise it falls back to the current node event's own info label.
+  const nodeInfo =
     currentEvent?.kind === "node" && currentEvent.deco.info !== undefined
       ? currentEvent.deco.info
       : "";
+  const infoLine = program.messages[step] ?? nodeInfo;
 
   return (
     // tabIndex makes the panel focusable so ← / → step the timeline once the
