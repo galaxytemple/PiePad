@@ -2,7 +2,7 @@
 
 import { useTheme } from "next-themes";
 import { useMemo, useState } from "react";
-import { clampStep, frameAt } from "@/lib/graph-directives";
+import { clampStep, frameAt, messageFor } from "@/lib/graph-directives";
 import { PALETTE } from "@/components/pad/types";
 import type { GraphProgram, SingleGraphState } from "./graph-types";
 import { type LayoutName, useCytoscapeGraph } from "./useCytoscapeGraph";
@@ -30,10 +30,12 @@ function GraphCanvas({
   state,
   layout,
   isDark,
+  message,
 }: {
   state: SingleGraphState;
   layout: LayoutName;
   isDark: boolean;
+  message: string;
 }) {
   const containerRef = useCytoscapeGraph(state, layout, isDark);
   return (
@@ -41,6 +43,11 @@ function GraphCanvas({
       <div className="px-2 py-1 font-mono text-[11px] text-default-500">
         [@{state.id}] {state.mode}
       </div>
+      {message ? (
+        <div className="whitespace-pre-line px-2 pb-1 font-mono text-[11px] text-default-700">
+          {message}
+        </div>
+      ) : null}
       <div ref={containerRef} className="h-96 w-full" />
     </div>
   );
@@ -64,14 +71,6 @@ export function GraphView({ program }: { program: GraphProgram }) {
     setRawStep((s) => clampStep(s + delta, program.stepCount));
   const state = useMemo(() => frameAt(program, step), [program, step]);
   const ids = Object.keys(state);
-  const currentEvent = program.events[step];
-  // The bottom footer shows the step's graph_info: narration if present;
-  // otherwise it falls back to the current node event's own info label.
-  const nodeInfo =
-    currentEvent?.kind === "node" && currentEvent.deco.info !== undefined
-      ? currentEvent.deco.info
-      : "";
-  const infoLine = program.messages[step] ?? nodeInfo;
 
   return (
     // tabIndex makes the panel focusable so ← / → step the timeline once the
@@ -148,6 +147,7 @@ export function GraphView({ program }: { program: GraphProgram }) {
                 state={graphState}
                 layout={layout}
                 isDark={isDark}
+                message={messageFor(program.messages, id, step)}
               />
             );
           })
@@ -189,11 +189,6 @@ export function GraphView({ program }: { program: GraphProgram }) {
         </div>
       ) : null}
 
-      {infoLine ? (
-        <div className="whitespace-pre-line border-t border-divider px-2 py-1 font-mono text-[11px] text-default-600">
-          {infoLine}
-        </div>
-      ) : null}
     </div>
   );
 }
