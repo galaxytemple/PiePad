@@ -302,8 +302,10 @@ describe("combined attributes in one directive", () => {
     expect(parseGraphProgram("graph: [[]]\ngraph_node:0").stepCount).toBe(1);
   });
 
-  it("rejects color:0 (palette index is 1-based)", () => {
-    expect(parseGraphProgram("graph: [[]]\ngraph_node:0:color:0").stepCount).toBe(1);
+  it("color:0 resolves to empty string (default/uncoloured) — NOT rejected", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_node:0:color:0");
+    expect(p.stepCount).toBe(2);
+    expect(frameAt(p, 1).main.nodes[0]).toEqual({ color: "" });
   });
 
   it("does NOT convert literal \\n in an edge label (only node info does)", () => {
@@ -434,6 +436,60 @@ describe("stripGraphDirectives removes graph_info too", () => {
   });
 });
 
+describe("color aliases + color:0=default", () => {
+  it("resolves node color aliases to the right PALETTE hex", () => {
+    const p = parseGraphProgram(
+      "graph: [[1],[0]]\ngraph_node:0:color:visited\ngraph_node:1:color:visiting"
+    );
+    const s = frameAt(p, p.stepCount - 1);
+    expect(s.main.nodes[0]).toEqual({ color: PALETTE[6] });  // visited = 7
+    expect(s.main.nodes[1]).toEqual({ color: PALETTE[15] }); // visiting = 16
+  });
+
+  it("resolves edge color aliases", () => {
+    const p = parseGraphProgram(
+      "graph: [[1],[0]]\ngraph_edge:0:1:color:edge_visited\ngraph_edge:1:0:color:edge_visited2"
+    );
+    const s = frameAt(p, p.stepCount - 1);
+    expect(s.main.edges["0->1"]).toEqual({ color: PALETTE[9] });  // 10
+    expect(s.main.edges["1->0"]).toEqual({ color: PALETTE[10] }); // 11
+  });
+
+  it("color:unvisited on an edge resolves to empty (default)", () => {
+    const p = parseGraphProgram(
+      "graph: [[1],[0]]\ngraph_edge:0:1:color:unvisited"
+    );
+    expect(frameAt(p, p.stepCount - 1).main.edges["0->1"]).toEqual({ color: "" });
+  });
+
+  it("color:0 and color:unvisited resolve to empty (default/uncoloured)", () => {
+    const p = parseGraphProgram(
+      "graph: [[1],[0]]\ngraph_node:0:color:0\ngraph_node:1:color:unvisited"
+    );
+    const s = frameAt(p, p.stepCount - 1);
+    expect(s.main.nodes[0]).toEqual({ color: "" });
+    expect(s.main.nodes[1]).toEqual({ color: "" });
+  });
+
+  it("unvisited reverts an already-coloured node to default", () => {
+    const p = parseGraphProgram(
+      "graph: [[]]\ngraph_node:0:color:visited\ngraph_node:0:color:unvisited"
+    );
+    expect(frameAt(p, p.stepCount - 1).main.nodes[0]).toEqual({ color: "" });
+  });
+
+  it("an unknown alias ignores the whole line", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_node:0:color:bogus");
+    expect(p.stepCount).toBe(1); // only the graph: event
+    expect(frameAt(p, 0).main.nodes[0]).toBeUndefined();
+  });
+
+  it("aliases work in a combined directive", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_node:0:color:visiting:info:hi");
+    expect(frameAt(p, 1).main.nodes[0]).toEqual({ color: PALETTE[15], info: "hi" });
+  });
+});
+
 describe("messageFor (sticky per-graph message)", () => {
   it("returns the latest message at or before the step, sticky across steps", () => {
     const m = { main: { 1: "a", 3: "b" } };
@@ -450,5 +506,30 @@ describe("messageFor (sticky per-graph message)", () => {
     expect(messageFor(m, "b", 5)).toBe("y");
     expect(messageFor(m, "missing", 5)).toBe("");
     expect(messageFor({}, "main", 5)).toBe("");
+  });
+});
+
+describe("info/label are interchangeable terminal text", () => {
+  it("accepts info on an edge (stored as the edge's label)", () => {
+    const p = parseGraphProgram("graph: [[1],[0]]\ngraph_edge:0:1:info:crit");
+    expect(frameAt(p, p.stepCount - 1).main.edges["0->1"]).toEqual({ label: "crit" });
+  });
+
+  it("accepts label on a node (stored as the node's info)", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_node:0:label:x");
+    expect(frameAt(p, p.stepCount - 1).main.nodes[0]).toEqual({ info: "x" });
+  });
+
+  it("edge color + info together no longer drops the color", () => {
+    const p = parseGraphProgram("graph: [[1],[0]]\ngraph_edge:0:1:color:16:info:crit");
+    expect(frameAt(p, p.stepCount - 1).main.edges["0->1"]).toEqual({
+      color: PALETTE[15],
+      label: "crit",
+    });
+  });
+
+  it("node info still works and keeps colons", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_node:0:info:a:b");
+    expect(frameAt(p, p.stepCount - 1).main.nodes[0]).toEqual({ info: "a:b" });
   });
 });

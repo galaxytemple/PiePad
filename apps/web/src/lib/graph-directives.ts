@@ -18,11 +18,32 @@ function parseIndex(s: string): number | null {
   return /^\d+$/.test(s.trim()) ? Number(s) : null;
 }
 
-// Parse a chain of `attr:value` pairs. `color` consumes one numeric token
-// (1..16 -> PALETTE hex); the terminal attr (`info`/`label`) consumes the rest
-// of the line (so it may contain colons). Returns null on any invalid/unknown
-// part, a missing value, or if no attribute was set. `convertNewlines` turns a
-// literal "\n" in the terminal value into a real newline (node info only).
+const COLOR_ALIASES: Record<string, number> = {
+  unvisited: 0,
+  visited: 7,
+  visiting: 16,
+  edge_visited: 10,
+  edge_visited2: 11,
+};
+
+// Resolve a color token (alias name or 0..16) to a PALETTE hex, or "" for 0
+// (default/uncoloured — the renderer falls back to the themed default), or null
+// when invalid (→ the directive line is ignored).
+function resolveColor(token: string): string | null {
+  const t = token.trim();
+  const n = t in COLOR_ALIASES ? COLOR_ALIASES[t]! : parseIndex(t);
+  if (n === null) return null;
+  if (n === 0) return "";
+  if (n < 1 || n > 16) return null;
+  return PALETTE[n - 1]!;
+}
+
+// Parse a chain of `attr:value` pairs. `color` consumes one token (alias name
+// or 1..16 -> PALETTE hex, or 0/"unvisited" -> "" for themed default); the
+// terminal attr (`info`/`label`) consumes the rest of the line (so it may
+// contain colons). Returns null on any invalid/unknown part, a missing value,
+// or if no attribute was set. `convertNewlines` turns a literal "\n" in the
+// terminal value into a real newline (node info only).
 function parseDecoChain(
   rest: string,
   terminalAttr: "info" | "label",
@@ -36,17 +57,19 @@ function parseDecoChain(
     if (colon === -1) return null; // attr without a value
     const attr = s.slice(0, colon);
     const after = s.slice(colon + 1);
-    if (attr === terminalAttr) {
-      deco[attr] = convertNewlines ? after.replace(/\\n/g, "\n") : after;
+    // Accept both "info" and "label" as the terminal text attr; store under the
+    // element's canonical key (node -> "info", edge -> "label").
+    if (attr === "info" || attr === "label") {
+      deco[terminalAttr] = convertNewlines ? after.replace(/\\n/g, "\n") : after;
       any = true;
       break;
     }
     if (attr === "color") {
       const next = after.indexOf(":");
       const token = next === -1 ? after : after.slice(0, next);
-      const c = parseIndex(token);
-      if (c === null || c < 1 || c > 16) return null;
-      deco.color = PALETTE[c - 1]!;
+      const hex = resolveColor(token);
+      if (hex === null) return null; // invalid color/alias → ignore whole line
+      deco.color = hex; // hex, or "" for color:0 (themed default)
       any = true;
       s = next === -1 ? "" : after.slice(next + 1);
       continue;
