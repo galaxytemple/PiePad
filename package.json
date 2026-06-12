@@ -12,6 +12,7 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "dc": "./scripts/dc",
+    "deploy:watch": "./scripts/deploy-watch",
     "db:migrate": "./scripts/dc --profile tools run --rm flyway migrate",
     "db:info": "./scripts/dc --profile tools run --rm flyway info",
     "db:validate": "./scripts/dc --profile tools run --rm flyway validate",
