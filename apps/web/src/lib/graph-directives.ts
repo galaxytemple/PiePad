@@ -243,7 +243,7 @@ function parseTreeLine(
 // The `info` variant is internal — it never enters `GraphProgram.events`. Its
 // `kind` must stay distinct from every GraphEvent kind ("graph"/"node"/"edge")
 // since parseGraphProgram dispatches on it.
-type ParseResult = GraphEvent | { kind: "info"; text: string };
+type ParseResult = GraphEvent | { kind: "info"; id: string; text: string };
 
 // `structures` is a local accumulator tracking each id's current adjacency so
 // node/edge directives can be range-validated against the graph in effect at
@@ -267,10 +267,10 @@ function parseLine(
   if (kw === "graph_node") return parseNodeLine(id, body, structures);
   if (kw === "graph_edge") return parseEdgeLine(id, body, structures);
   if (kw === "tree") return parseTreeLine(id, body, structures, warnings);
-  // graph_info: panel-bottom narration. @id (in `id`) is ignored — the message
-  // is panel-global. trimStart drops the conventional space in "graph_info: hi".
+  // graph_info[@id]: per-graph narration shown under that graph's header.
+  // trimStart drops the conventional space in "graph_info: hi".
   if (kw === "graph_info") {
-    return { kind: "info", text: body.trimStart().replace(/\\n/g, "\n") };
+    return { kind: "info", id, text: body.trimStart().replace(/\\n/g, "\n") };
   }
   return null;
 }
@@ -278,19 +278,37 @@ function parseLine(
 export function parseGraphProgram(stdout: string): GraphProgram {
   const events: GraphEvent[] = [];
   const warnings: string[] = [];
-  const messages: Record<number, string> = {};
+  const messages: Record<string, Record<number, string>> = {};
   const structures = new Map<string, number[][]>();
   for (const raw of stdout.split("\n")) {
     const result = parseLine(raw, structures, warnings);
     if (!result) continue;
     if (result.kind === "info") {
       // Attach to the previous step; ignore if no event has been emitted yet.
-      if (events.length > 0) messages[events.length - 1] = result.text;
+      if (events.length > 0) {
+        (messages[result.id] ??= {})[events.length - 1] = result.text;
+      }
       continue;
     }
     events.push(result);
   }
   return { events, stepCount: events.length, warnings, messages };
+}
+
+// The message shown for graph `id` at `step` is the most recent graph_info for
+// that id at or before `step` (sticky — persists until the next one). "" if none.
+export function messageFor(
+  messages: Record<string, Record<number, string>>,
+  id: string,
+  step: number
+): string {
+  const byStep = messages[id];
+  if (!byStep) return "";
+  for (let k = step; k >= 0; k--) {
+    const m = byStep[k];
+    if (m !== undefined) return m;
+  }
+  return "";
 }
 
 export function clampStep(index: number, stepCount: number): number {

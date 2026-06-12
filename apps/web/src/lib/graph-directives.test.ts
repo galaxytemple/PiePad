@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampStep, frameAt, parseGraphProgram, stripGraphDirectives } from "./graph-directives";
+import { clampStep, frameAt, messageFor, parseGraphProgram, stripGraphDirectives } from "./graph-directives";
 import { PALETTE } from "@/components/pad/types";
 
 describe("parseGraphProgram — graph: directive", () => {
@@ -385,19 +385,19 @@ describe("graph_info: panel message", () => {
       "graph: [[]]\ngraph_node:0:color:1\ngraph_info: visiting 0"
     );
     expect(p.stepCount).toBe(2); // graph + node, NOT 3
-    expect(p.messages[1]).toBe("visiting 0");
+    expect(p.messages.main[1]).toBe("visiting 0");
   });
 
   it("trims the conventional leading space and converts \\n", () => {
     const p = parseGraphProgram("graph: [[]]\ngraph_info: a\\nb");
-    expect(p.messages[0]).toBe("a\nb");
+    expect(p.messages.main[0]).toBe("a\nb");
   });
 
   it("last graph_info wins for the same step", () => {
     const p = parseGraphProgram(
       "graph: [[]]\ngraph_info: first\ngraph_info: second"
     );
-    expect(p.messages[0]).toBe("second");
+    expect(p.messages.main[0]).toBe("second");
   });
 
   it("ignores graph_info before any event", () => {
@@ -406,15 +406,16 @@ describe("graph_info: panel message", () => {
     expect(p.messages).toEqual({});
   });
 
-  it("ignores the @id on graph_info (panel-global)", () => {
-    const p = parseGraphProgram("graph: [[]]\ngraph_info@x: hi");
-    expect(p.messages[0]).toBe("hi");
+  it("routes graph_info@id to that graph's bucket", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph@b: [[]]\ngraph_info@b: hi");
+    expect(p.messages.b[1]).toBe("hi"); // attached after the 2nd event (graph b)
+    expect(p.messages.main).toBeUndefined();
   });
 
   it("attaches to a preceding tree: step too", () => {
     const p = parseGraphProgram("tree: [1,2,3]\ngraph_info: rooted");
     expect(p.stepCount).toBe(1);
-    expect(p.messages[0]).toBe("rooted");
+    expect(p.messages.main[0]).toBe("rooted");
   });
 });
 
@@ -430,5 +431,24 @@ describe("stripGraphDirectives removes graph_info too", () => {
     expect(stripGraphDirectives(stdout)).toBe(
       "start\ninfo: a normal log line\nend"
     );
+  });
+});
+
+describe("messageFor (sticky per-graph message)", () => {
+  it("returns the latest message at or before the step, sticky across steps", () => {
+    const m = { main: { 1: "a", 3: "b" } };
+    expect(messageFor(m, "main", 0)).toBe("");
+    expect(messageFor(m, "main", 1)).toBe("a");
+    expect(messageFor(m, "main", 2)).toBe("a"); // sticky — persists past step 1
+    expect(messageFor(m, "main", 3)).toBe("b");
+    expect(messageFor(m, "main", 9)).toBe("b");
+  });
+
+  it("is isolated per graph id and empty when none", () => {
+    const m = { main: { 0: "x" }, b: { 0: "y" } };
+    expect(messageFor(m, "main", 5)).toBe("x");
+    expect(messageFor(m, "b", 5)).toBe("y");
+    expect(messageFor(m, "missing", 5)).toBe("");
+    expect(messageFor({}, "main", 5)).toBe("");
   });
 });
