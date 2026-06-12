@@ -411,3 +411,18 @@ describe("graph_info: panel message", () => {
     expect(p.messages[0]).toBe("hi");
   });
 });
+
+describe("stripGraphDirectives removes graph_info too", () => {
+  it("strips graph_info: and graph_info@x: lines, keeps a plain info: log", () => {
+    const stdout = [
+      "start",
+      "graph_info: hello",
+      "graph_info@x: hi",
+      "info: a normal log line",
+      "end",
+    ].join("\n");
+    expect(stripGraphDirectives(stdout)).toBe(
+      "start\ninfo: a normal log line\nend"
+    );
+  });
+});

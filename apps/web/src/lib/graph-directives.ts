@@ -334,7 +334,7 @@ function applyEvent(state: MultiGraphState, ev: GraphEvent): void {
 
 // Matches the directive keyword shape (with optional @id). Strips even invalid
 // directives so stdout stays clean; validity is surfaced via the graph panel.
-const DIRECTIVE_RE = /^(graph(_node|_edge)?|tree)(@[A-Za-z0-9_-]+)?:/;
+const DIRECTIVE_RE = /^(graph(_node|_edge|_info)?|tree)(@[A-Za-z0-9_-]+)?:/;
 
 export function stripGraphDirectives(stdout: string): string {
   return stdout
