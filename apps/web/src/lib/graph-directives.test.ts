@@ -302,8 +302,10 @@ describe("combined attributes in one directive", () => {
     expect(parseGraphProgram("graph: [[]]\ngraph_node:0").stepCount).toBe(1);
   });
 
-  it("rejects color:0 (palette index is 1-based)", () => {
-    expect(parseGraphProgram("graph: [[]]\ngraph_node:0:color:0").stepCount).toBe(1);
+  it("color:0 resolves to empty string (default/uncoloured) — NOT rejected", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_node:0:color:0");
+    expect(p.stepCount).toBe(2);
+    expect(frameAt(p, 1).main.nodes[0]).toEqual({ color: "" });
   });
 
   it("does NOT convert literal \\n in an edge label (only node info does)", () => {
@@ -431,6 +433,53 @@ describe("stripGraphDirectives removes graph_info too", () => {
     expect(stripGraphDirectives(stdout)).toBe(
       "start\ninfo: a normal log line\nend"
     );
+  });
+});
+
+describe("color aliases + color:0=default", () => {
+  it("resolves node color aliases to the right PALETTE hex", () => {
+    const p = parseGraphProgram(
+      "graph: [[1],[0]]\ngraph_node:0:color:visited\ngraph_node:1:color:visiting"
+    );
+    const s = frameAt(p, p.stepCount - 1);
+    expect(s.main.nodes[0]).toEqual({ color: PALETTE[6] });  // visited = 7
+    expect(s.main.nodes[1]).toEqual({ color: PALETTE[15] }); // visiting = 16
+  });
+
+  it("resolves edge color aliases", () => {
+    const p = parseGraphProgram(
+      "graph: [[1],[0]]\ngraph_edge:0:1:color:edge_visited\ngraph_edge:1:0:color:edge_visited2"
+    );
+    const s = frameAt(p, p.stepCount - 1);
+    expect(s.main.edges["0->1"]).toEqual({ color: PALETTE[9] });  // 10
+    expect(s.main.edges["1->0"]).toEqual({ color: PALETTE[10] }); // 11
+  });
+
+  it("color:0 and color:unvisited resolve to empty (default/uncoloured)", () => {
+    const p = parseGraphProgram(
+      "graph: [[1],[0]]\ngraph_node:0:color:0\ngraph_node:1:color:unvisited"
+    );
+    const s = frameAt(p, p.stepCount - 1);
+    expect(s.main.nodes[0]).toEqual({ color: "" });
+    expect(s.main.nodes[1]).toEqual({ color: "" });
+  });
+
+  it("unvisited reverts an already-coloured node to default", () => {
+    const p = parseGraphProgram(
+      "graph: [[]]\ngraph_node:0:color:visited\ngraph_node:0:color:unvisited"
+    );
+    expect(frameAt(p, p.stepCount - 1).main.nodes[0]).toEqual({ color: "" });
+  });
+
+  it("an unknown alias ignores the whole line", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_node:0:color:bogus");
+    expect(p.stepCount).toBe(1); // only the graph: event
+    expect(frameAt(p, 0).main.nodes[0]).toBeUndefined();
+  });
+
+  it("aliases work in a combined directive", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_node:0:color:visiting:info:hi");
+    expect(frameAt(p, 1).main.nodes[0]).toEqual({ color: PALETTE[15], info: "hi" });
   });
 });
 
