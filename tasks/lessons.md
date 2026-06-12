@@ -557,3 +557,75 @@ start of related work to avoid repeating the same mistakes.
   it) instead of an effect. For a genuinely-safe ref read during render
   (re-render guaranteed by a co-located state update), a narrowly-scoped
   `// eslint-disable-next-line react-hooks/refs` with a why-comment is fine.
+
+---
+
+## Graph DSL / Directive Parsing
+
+### Unknown attr mid-chain silently drops earlier attrs in the same directive
+
+- **Symptom**: `color:16:info:x` on an edge applies neither the color nor the
+  label. No error is thrown; both attrs are silently discarded.
+- **Cause**: `parseDecoChain` walks tokens left-to-right. When it hits an
+  unrecognized token it rejects the rest of the chain and returns early,
+  discarding already-parsed values accumulated before the bad token.
+- **Fix**: on an unrecognized token, break out of the chain loop with the
+  accumulated attrs intact (partial-match semantics), or emit a parse warning
+  and skip only the bad token. Never discard prior valid attrs because a later
+  token is unknown. Write a test: `color:16:bogus` should still apply color 16.
+
+### `color:0` → empty string for theme-aware "no color"
+
+- **Pattern**: map color index 0 → `""` in `resolveColor`, then in the renderer
+  use `element.data("color") || themedDefault`. This lets a directive explicitly
+  reset a node/edge to the current theme's default color without hard-coding any
+  hex — the fallback is evaluated at render time so theme switches still work.
+
+### Per-step narration: attach to a graph header, not a global footer
+
+- **Symptom**: `graph_info:` messages placed in a footer below the step bar are
+  clipped on short viewports and visually bleed into node-info output
+  (`d:5`/`low:3` showing through).
+- **Fix**: render per-step messages directly under the `[@id]` graph header.
+  Each graph owns its own message strip; the strip is only visible when there is
+  a message for the current step.
+
+### "Sticky at-or-before" display pattern for sparse per-step annotations
+
+- **Context**: a directive that fires on step 3 should remain visible on steps
+  4, 5, … until replaced or cleared, rather than vanishing after step 3.
+- **Pattern**:
+  ```ts
+  // messages: Record<graphId, Record<step, string>>
+  function messageFor(messages: Record<string, Record<number, string>>, id: string, step: number): string {
+    const byStep = messages[id];
+    if (!byStep) return "";
+    const steps = Object.keys(byStep).map(Number).filter(s => s <= step).sort((a, b) => b - a);
+    return steps.length ? byStep[steps[0]] : "";
+  }
+  ```
+  The helper returns the most-recent message whose step is ≤ the current step.
+  An empty string at step N explicitly clears the message from that step forward.
+
+### Non-event directives: parse to a union type, dispatch separately
+
+- **Pattern**: when a directive (e.g. `graph_info:`) does not consume an
+  animation step, model it as a separate union arm in the parse result
+  (`GraphEvent | InfoDirective`) and handle it in the program dispatcher rather
+  than pushing it onto the event queue. This keeps the step counter correct and
+  avoids off-by-one shifts in all subsequent events.
+
+---
+
+## Piston
+
+### `PISTON_OUTPUT_MAX_SIZE` defaults to 1024 bytes — raise it for verbose programs
+
+- **Symptom**: `/api/run` returns a result with `stdout` truncated and a
+  `"stdout length exceeded"` message appended, even for programs that produce
+  only a few KB of output.
+- **Cause**: engineer-man/piston caps combined stdout+stderr at
+  `PISTON_OUTPUT_MAX_SIZE` bytes (default 1024). The container silently
+  truncates at that boundary.
+- **Fix**: set `PISTON_OUTPUT_MAX_SIZE=65536` (or higher) in the Piston
+  container's environment. Recreate the container to apply.

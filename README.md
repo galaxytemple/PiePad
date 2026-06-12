@@ -75,8 +75,14 @@ output panel):
 
 - `graph[@id]: [[1,2],[],[]]` — adjacency list; `:directed` (default) or `:undirected`.
 - `tree[@id]: [1,2,3,null,null,4,5]` — binary tree, LeetCode level-order (`null`/`None`).
-- `graph_node[@id]:<n>:color:<1-16>:info:<text>` — colour and/or label a node (attrs combine in one step).
-- `graph_edge[@id]:<src>:<dst>:color:<1-16>:label:<text>` — colour and/or label an edge.
+- `graph_node[@id]:<n>:color:<c>:info:<text>` — colour and/or label a node (attrs combine in one step; all attrs optional).
+- `graph_edge[@id]:<src>:<dst>:color:<c>:label:<text>` — colour and/or label an edge. `info` and `label` are interchangeable as the terminal text attr on both directives.
+- `graph_info[@id]: <text>` — narration shown under that graph's `[@id] mode` header. Sticky (persists until the next `graph_info` for the same id). Does **not** consume a timeline step.
+
+`<c>` is a palette index `1–16`, or a semantic alias: `unvisited` (0, themed
+default node bg), `visited` (7), `visiting` (16), `edge_visited` (10),
+`edge_visited2` (11). `color:0` / `color:unvisited` clears the colour back to the
+themed default. A literal `\n` in node `info` becomes a line break.
 
 A step timeline (◀ ▶ / slider / ← →) replays the directives; `@id` shows several
 graphs at once. Built with Cytoscape + react-resizable-panels in

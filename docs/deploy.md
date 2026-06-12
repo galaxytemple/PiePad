@@ -196,6 +196,7 @@ docker run -d \
   -e PISTON_DISABLE_NETWORKING=true \
   -e PISTON_RUN_TIMEOUT=30000 \
   -e PISTON_COMPILE_TIMEOUT=30000 \
+  -e PISTON_OUTPUT_MAX_SIZE=1048576 \
   -m 600m \
   --memory-swap 1200m \
   --tmpfs /piston/jobs:exec,uid=1000,gid=1000,mode=711 \
@@ -313,6 +314,7 @@ When the app host's IP changes (rebuild, new region, free-tier expiry):
 | `ORA-41900: missing <SELECT/INSERT> privilege` | `APP_PROD_DML_ROLE` missing the corresponding `<priv> ANY TABLE ON SCHEMA` grant. Note `READ` ≠ `SELECT`. |
 | `NJS-040: connection request timeout` | Pool exhausted or `sessionCallback` hanging. PiePad runs the schema setup inline (see lessons), not via `sessionCallback`. |
 | Run button → `piston_unreachable` | Piston host down, or app host's `PISTON_URL` points at the wrong IP / doesn't include `/api/v2` |
+| Run output cut off / `stdout length exceeded` | `PISTON_OUTPUT_MAX_SIZE` not set (default 1 KB). Set `-e PISTON_OUTPUT_MAX_SIZE=1048576` on the Piston container. (Co-located prod sets it in `docker/docker-compose.yml`.) |
 | Run button → `piston_rejected` (502) | Piston returned `{message}` at 200 — language not installed on the Piston host, or request hit a cap. `docker logs -f piepad-piston` for the real error. |
 | ws clients all read-only | `meta.deleted` got persisted somehow; clear LevelDB volume `ws_data` and restart |
 | Wallet errors | `wallet/cwallet.sso` missing inside the container — check the compose `volumes:` line and that you scp'd the wallet to `/opt/piepad/wallet/` |
