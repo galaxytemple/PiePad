@@ -455,6 +455,13 @@ describe("color aliases + color:0=default", () => {
     expect(s.main.edges["1->0"]).toEqual({ color: PALETTE[10] }); // 11
   });
 
+  it("color:unvisited on an edge resolves to empty (default)", () => {
+    const p = parseGraphProgram(
+      "graph: [[1],[0]]\ngraph_edge:0:1:color:unvisited"
+    );
+    expect(frameAt(p, p.stepCount - 1).main.edges["0->1"]).toEqual({ color: "" });
+  });
+
   it("color:0 and color:unvisited resolve to empty (default/uncoloured)", () => {
     const p = parseGraphProgram(
       "graph: [[1],[0]]\ngraph_node:0:color:0\ngraph_node:1:color:unvisited"
