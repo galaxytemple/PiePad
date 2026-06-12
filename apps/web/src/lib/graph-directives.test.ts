@@ -501,3 +501,28 @@ describe("messageFor (sticky per-graph message)", () => {
     expect(messageFor({}, "main", 5)).toBe("");
   });
 });
+
+describe("info/label are interchangeable terminal text", () => {
+  it("accepts info on an edge (stored as the edge's label)", () => {
+    const p = parseGraphProgram("graph: [[1],[0]]\ngraph_edge:0:1:info:crit");
+    expect(frameAt(p, p.stepCount - 1).main.edges["0->1"]).toEqual({ label: "crit" });
+  });
+
+  it("accepts label on a node (stored as the node's info)", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_node:0:label:x");
+    expect(frameAt(p, p.stepCount - 1).main.nodes[0]).toEqual({ info: "x" });
+  });
+
+  it("edge color + info together no longer drops the color", () => {
+    const p = parseGraphProgram("graph: [[1],[0]]\ngraph_edge:0:1:color:16:info:crit");
+    expect(frameAt(p, p.stepCount - 1).main.edges["0->1"]).toEqual({
+      color: PALETTE[15],
+      label: "crit",
+    });
+  });
+
+  it("node info still works and keeps colons", () => {
+    const p = parseGraphProgram("graph: [[]]\ngraph_node:0:info:a:b");
+    expect(frameAt(p, p.stepCount - 1).main.nodes[0]).toEqual({ info: "a:b" });
+  });
+});

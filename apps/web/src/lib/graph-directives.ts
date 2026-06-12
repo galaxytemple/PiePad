@@ -57,8 +57,10 @@ function parseDecoChain(
     if (colon === -1) return null; // attr without a value
     const attr = s.slice(0, colon);
     const after = s.slice(colon + 1);
-    if (attr === terminalAttr) {
-      deco[attr] = convertNewlines ? after.replace(/\\n/g, "\n") : after;
+    // Accept both "info" and "label" as the terminal text attr; store under the
+    // element's canonical key (node -> "info", edge -> "label").
+    if (attr === "info" || attr === "label") {
+      deco[terminalAttr] = convertNewlines ? after.replace(/\\n/g, "\n") : after;
       any = true;
       break;
     }
