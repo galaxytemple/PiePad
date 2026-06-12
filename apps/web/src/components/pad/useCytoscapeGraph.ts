@@ -7,6 +7,10 @@ import type { SingleGraphState } from "./graph-types";
 export const LAYOUTS = ["breadthfirst", "cose", "circle", "grid"] as const;
 export type LayoutName = (typeof LAYOUTS)[number];
 
+// Default node background per theme — also the colour `color:0` ("default")
+// resolves to, surfaced in the GraphView legend.
+export const DEFAULT_NODE_BG = { dark: "#3f3f46", light: "#d4d4d8" } as const;
+
 function toElements(s: SingleGraphState): ElementDefinition[] {
   const nodes: ElementDefinition[] = s.adjacency.map((_, i) => {
     const deco = s.nodes[i] ?? {};
@@ -53,7 +57,7 @@ function buildStyle(isDark: boolean): cytoscape.StylesheetStyle[] {
   const cached = STYLE_CACHE.get(isDark);
   if (cached) return cached;
   const text = isDark ? "#e4e4e7" : "#18181b";
-  const nodeBg = isDark ? "#3f3f46" : "#d4d4d8";
+  const nodeBg = isDark ? DEFAULT_NODE_BG.dark : DEFAULT_NODE_BG.light;
   const line = isDark ? "#71717a" : "#a1a1aa";
   const style: cytoscape.StylesheetStyle[] = [
     {

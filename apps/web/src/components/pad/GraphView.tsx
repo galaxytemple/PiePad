@@ -5,13 +5,18 @@ import { useMemo, useState } from "react";
 import { clampStep, frameAt, messageFor } from "@/lib/graph-directives";
 import { PALETTE } from "@/components/pad/types";
 import type { GraphProgram, SingleGraphState } from "./graph-types";
-import { type LayoutName, useCytoscapeGraph } from "./useCytoscapeGraph";
+import {
+  DEFAULT_NODE_BG,
+  type LayoutName,
+  useCytoscapeGraph,
+} from "./useCytoscapeGraph";
 
 const USAGE = `print directives in your Python code:
   graph: [[1,2],[1],[2]]            define a directed graph (adjacency list)
   graph:undirected: [[1],[0]]       undirected graph
   tree: [1,2,3,null,null,4,5]       binary tree (LeetCode level-order; null/None)
   graph_node:0:color:1              colour node 0 (1..16 — see swatches below)
+  color names: unvisited(0) visited(7) visiting(16) edge_visited(10) edge_visited2(11)
   graph_node:0:info:a\\nb           label under node 0 (\\n = line break)
   graph_edge:0:1:color:3            colour edge 0->1
   graph_edge:0:1:label:w=5          label edge 0->1 (weights)
@@ -104,8 +109,20 @@ export function GraphView({ program }: { program: GraphProgram }) {
           <pre className="whitespace-pre-wrap px-2 pt-1 font-mono text-[10px] text-default-600">
             {USAGE}
           </pre>
-          {/* colour number -> colour mapping (1..16) */}
+          {/* colour number -> colour mapping (0 = default, 1..16 = palette) */}
           <div className="flex flex-wrap gap-x-2 gap-y-1 px-2 pb-2 pt-1">
+            <span
+              title="default / unvisited"
+              className="flex items-center gap-1 font-mono text-[10px] text-default-600"
+            >
+              <span
+                className="inline-block h-3 w-3 rounded-sm border border-divider"
+                style={{
+                  background: isDark ? DEFAULT_NODE_BG.dark : DEFAULT_NODE_BG.light,
+                }}
+              />
+              0 default
+            </span>
             {PALETTE.map((hex, i) => (
               <span
                 key={hex}
