@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { isAdminEmail } from "./admin";
+import { parseAdminEmails } from "@piepad/db";
 
 const ORIGINAL = process.env.ADMIN_EMAILS;
 
@@ -60,5 +61,32 @@ describe("isAdminEmail", () => {
     process.env.ADMIN_EMAILS = "bob@example.com";
     expect(isAdminEmail("alice@example.com")).toBe(false);
     expect(isAdminEmail("bob@example.com")).toBe(true);
+  });
+});
+
+describe("parseAdminEmails", () => {
+  test("returns empty array when input is empty or undefined", () => {
+    expect(parseAdminEmails("")).toEqual([]);
+    expect(parseAdminEmails(undefined)).toEqual([]);
+  });
+
+  test("parses, trims, and lowercases comma-separated emails", () => {
+    expect(
+      parseAdminEmails("  Alice@Example.com , BOB@Example.COM  ")
+    ).toEqual(["alice@example.com", "bob@example.com"]);
+  });
+
+  test("filters out empty entries from stray commas", () => {
+    expect(parseAdminEmails(",,admin@example.com,,")).toEqual([
+      "admin@example.com",
+    ]);
+  });
+
+  test("defaults to process.env.ADMIN_EMAILS when no argument is given", () => {
+    process.env.ADMIN_EMAILS = "root@example.com, superuser@example.com ";
+    expect(parseAdminEmails()).toEqual([
+      "root@example.com",
+      "superuser@example.com",
+    ]);
   });
 });

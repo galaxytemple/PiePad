@@ -44,8 +44,13 @@ export interface CleanupSummary {
   failed: number;
 }
 
-export async function runCleanupOnce(): Promise<CleanupSummary> {
-  const expired = await listExpiredRooms(ROOM_TTL_DAYS);
+export async function runCleanupOnce(
+  adminEmails?: string[]
+): Promise<CleanupSummary> {
+  const expired =
+    adminEmails !== undefined
+      ? await listExpiredRooms(ROOM_TTL_DAYS, 500, adminEmails)
+      : await listExpiredRooms(ROOM_TTL_DAYS);
   let deleted = 0;
   let failed = 0;
 

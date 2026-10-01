@@ -124,4 +124,12 @@ describe("runCleanupOnce", () => {
     expect(dbMocks.listExpiredRooms).toHaveBeenCalledWith(7);
     delete process.env.ROOM_TTL_DAYS;
   });
+
+  test("passes adminEmails to listExpiredRooms when provided", async () => {
+    dbMocks.listExpiredRooms.mockResolvedValue([]);
+    await runCleanupOnce(["admin@example.com"]);
+    expect(dbMocks.listExpiredRooms).toHaveBeenCalledWith(30, 500, [
+      "admin@example.com",
+    ]);
+  });
 });

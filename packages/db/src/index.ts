@@ -456,24 +456,60 @@ export interface ExpiredRoomRow {
   lastAccessedAt: Date;
 }
 
+export function parseAdminEmails(raw = process.env.ADMIN_EMAILS): string[] {
+  return (raw ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry.length > 0);
+}
+
 export async function listExpiredRooms(
   ttlDays: number,
-  limit = 500
+  limit = 500,
+  adminEmails: string[] = parseAdminEmails()
 ): Promise<ExpiredRoomRow[]> {
   const safeDays = Math.max(1, Math.min(3650, Math.floor(ttlDays)));
   const safeLimit = Math.max(1, Math.min(5000, Math.floor(limit)));
+  const normalizedAdmins = Array.from(
+    new Set(
+      adminEmails
+        .map((e) => e.trim().toLowerCase())
+        .filter((e) => e.length > 0)
+    )
+  ).slice(0, 1000);
+
   return withConnection(async (conn) => {
     type Row = { ID: string; NAME: string; LAST_ACCESSED_AT: Date };
+    const binds: Record<string, string> = {};
+    let adminFilterSql = "";
+
+    if (normalizedAdmins.length > 0) {
+      const placeholders = normalizedAdmins.map((email, idx) => {
+        const key = `adminEmail${idx}`;
+        binds[key] = email;
+        return `:${key}`;
+      });
+      adminFilterSql = `
+        AND NOT EXISTS (
+          SELECT 1
+            FROM users u
+           WHERE u.id = r.created_by_user_id
+             AND LOWER(u.email) IN (${placeholders.join(", ")})
+        )`;
+    }
+
     const result = await conn.execute<Row>(
       // ORDER BY id (after last_accessed_at) makes the slice deterministic —
       // without it, ties on last_accessed_at + a row count exactly equal to
       // the limit could leave the same rooms in the next run's queue.
-      `SELECT id, name, last_accessed_at
-         FROM rooms
-        WHERE last_accessed_at < SYSTIMESTAMP - INTERVAL '${safeDays}' DAY
-        ORDER BY last_accessed_at ASC, id ASC
+      // Rooms created by admin users are exempt from 30-day inactivity deletion.
+      `SELECT r.id, r.name, r.last_accessed_at
+         FROM rooms r
+        WHERE r.last_accessed_at < SYSTIMESTAMP - INTERVAL '${safeDays}' DAY
+        ${adminFilterSql}
+        ORDER BY r.last_accessed_at ASC, r.id ASC
         FETCH FIRST ${safeLimit} ROWS ONLY`,
-      {},
+      binds,
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
     return (result.rows ?? []).map((r) => ({
