@@ -6,7 +6,7 @@ import { splitSentences } from '@/lib/quiz';
 import { createPassage, updatePassage, updateQuizConfig } from './actions';
 import { PassageForm } from './PassageForm';
 import { DeletePassageButton } from './DeletePassageButton';
-import Link from 'next/link';
+import { QuizHeader } from '@/components/QuizHeader';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,22 +17,15 @@ export default async function QuizSettingsPage() {
   const [passages, config] = await Promise.all([getPassages(), getQuizConfig()]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-6 sm:p-8">
-      <div className="max-w-2xl mx-auto space-y-8">
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Quiz Settings</h1>
-            <p className="text-sm text-default-500 mt-1">
-              지문 등록/관리 및 출제 유형 비율 설정
-            </p>
-          </div>
-          <Link
-            href="/quiz"
-            className="text-xs px-3 py-1.5 rounded-lg border border-divider hover:bg-content2 transition-colors"
-          >
-            ← 퀴즈 홈
-          </Link>
-        </header>
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <QuizHeader active="setting" />
+      <main className="mx-auto w-full max-w-2xl flex-1 p-6 sm:p-8 space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Quiz Settings</h1>
+          <p className="text-sm text-default-500 mt-1">
+            지문 등록/관리 및 출제 유형 비율 설정
+          </p>
+        </div>
 
         <section className="bg-content1 border border-divider rounded-xl p-5">
           <h2 className="text-sm font-semibold text-foreground mb-1">출제 유형 비율 (Format ratio)</h2>
@@ -129,7 +122,7 @@ export default async function QuizSettingsPage() {
             </div>
           )}
         </section>
-      </div>
+      </main>
     </div>
   );
 }

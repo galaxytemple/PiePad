@@ -73,12 +73,20 @@ export default async function HomePage() {
             </Link>
           ) : null}
           {isQuizOwner(session) ? (
-            <Link
-              href="/quiz"
-              className="text-sm text-default-500 hover:text-default-900"
-            >
-              Quiz
-            </Link>
+            <>
+              <Link
+                href="/quiz"
+                className="text-sm text-default-500 hover:text-default-900"
+              >
+                Quiz
+              </Link>
+              <Link
+                href="/quiz-settings"
+                className="text-sm text-default-500 hover:text-default-900"
+              >
+                Setting
+              </Link>
+            </>
           ) : null}
           <Link
             href="/me"

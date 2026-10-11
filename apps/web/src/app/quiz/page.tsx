@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { isQuizOwner } from '@/lib/quiz-owner';
 import { getMonthlyStats } from '@piepad/db';
 import { Calendar } from './Calendar';
+import { QuizHeader } from '@/components/QuizHeader';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -33,30 +34,15 @@ export default async function QuizPage({
   const stats = await getMonthlyStats(ym);
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-6 sm:p-8">
-      <div className="space-y-6 max-w-md mx-auto">
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">System Design Quiz</h1>
-            <p className="text-xs text-default-400 mt-0.5">
-              Daily habit tracker & recitation practice
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/quiz-settings"
-              className="text-xs px-2.5 py-1.5 rounded-lg border border-divider hover:bg-content2 transition-colors"
-            >
-              ⚙️ 설정
-            </Link>
-            <Link
-              href="/"
-              className="text-xs px-2.5 py-1.5 rounded-lg border border-divider hover:bg-content2 transition-colors"
-            >
-              Pad로 가기
-            </Link>
-          </div>
-        </header>
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <QuizHeader active="quiz" />
+      <main className="mx-auto w-full max-w-md flex-1 p-6 sm:p-8 space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">System Design Quiz</h1>
+          <p className="text-xs text-default-400 mt-0.5">
+            Daily habit tracker & recitation practice
+          </p>
+        </div>
 
         <Calendar ym={ym} stats={stats} />
 
@@ -66,7 +52,7 @@ export default async function QuizPage({
         >
           퀴즈 시작하기 →
         </Link>
-      </div>
+      </main>
     </div>
   );
 }
