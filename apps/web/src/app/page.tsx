@@ -9,6 +9,7 @@ import {
   listRoomsCreatedByUser,
   listRoomsVisitedByUser,
 } from "@piepad/db";
+import { isQuizOwner } from "@/lib/quiz-owner";
 import { Avatar, Button, Card } from "@heroui/react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -69,6 +70,14 @@ export default async function HomePage() {
               className="text-sm text-default-500 hover:text-default-900"
             >
               Admin
+            </Link>
+          ) : null}
+          {isQuizOwner(session) ? (
+            <Link
+              href="/quiz"
+              className="text-sm text-default-500 hover:text-default-900"
+            >
+              Quiz
             </Link>
           ) : null}
           <Link
