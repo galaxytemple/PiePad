@@ -154,7 +154,7 @@ jobs:
           QUIZ_ORACLE_USER=${{ secrets.QUIZ_ORACLE_USER }}
           QUIZ_ORACLE_PASSWORD=${{ secrets.QUIZ_ORACLE_PASSWORD }}
           QUIZ_ORACLE_SCHEMA=${{ secrets.QUIZ_ORACLE_SCHEMA }}
-          QUIZ_OWNER_EMAIL=${{ secrets.QUIZ_OWNER_EMAIL }}
+          QUIZ_OWNER_EMAIL=${{ secrets.QUIZ_OWNER_EMAIL || secrets.ADMIN_EMAILS }}
           EOF
 
       # Sync source + .env. We no longer build on the box, but keeping the repo
